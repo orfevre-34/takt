@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS = {
     },
   },
   displayMode: 'used' as const,
+  layout: 'vertical' as const,
   alwaysOnTop: false,
   language: 'ja' as const,
   cliPaths: { npx: 'npx', claude: 'claude', codex: 'codex' },

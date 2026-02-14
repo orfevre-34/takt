@@ -10,21 +10,7 @@ import { formatTimeRemaining } from './utils/format';
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const resizeToFit = useCallback(() => {
-    if (!containerRef.current) return;
-    const height = containerRef.current.scrollHeight;
-    window.electronAPI?.resizeToContent(height);
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => resizeToFit());
-    observer.observe(el);
-    resizeToFit();
-    return () => observer.disconnect();
-  }, [resizeToFit]);
+  const contentRef = useRef<HTMLDivElement>(null);
   const { settings, updateSettings } = useSettings();
   const { claudeUsage, codexUsage, refresh: refreshUsage } = useUsage();
   const { claudeTokenUsage, codexTokenUsage } = useTokenUsage();
@@ -83,6 +69,38 @@ export function App() {
     settings.providers.codex.enabled ||
     (settings.ccusage.codex.enabled && !!codexTokenUsage);
 
+  const isHorizontal = settings.layout === 'horizontal' && showClaude && showCodex;
+
+  // コンテンツに合わせてウィンドウをリサイズ
+  const resizeToFit = useCallback(() => {
+    if (!containerRef.current) return;
+    const height = containerRef.current.scrollHeight;
+    // 横並び時: contentRef の自然幅 + padding(p-3 = 12px*2) で幅も自動調整
+    const width = isHorizontal && contentRef.current
+      ? contentRef.current.offsetWidth + 24
+      : null;
+    window.electronAPI?.resizeToContent(width, height);
+  }, [isHorizontal]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => resizeToFit());
+    observer.observe(el);
+    resizeToFit();
+    return () => observer.disconnect();
+  }, [resizeToFit]);
+
+  // 横→縦切替時にウィンドウ幅をデフォルトにリセット
+  const prevLayoutRef = useRef(settings.layout);
+  useEffect(() => {
+    if (prevLayoutRef.current === 'horizontal' && settings.layout !== 'horizontal') {
+      const height = containerRef.current?.scrollHeight ?? 300;
+      window.electronAPI?.resizeToContent(480, height);
+    }
+    prevLayoutRef.current = settings.layout;
+  }, [settings.layout]);
+
   return (
     <div
       ref={containerRef}
@@ -126,16 +144,17 @@ export function App() {
 
       {/* Content */}
       <div
-        className="p-3 space-y-3"
+        className="p-3"
         data-no-drag
       >
         {/* Error message */}
         {error && (
-          <div className="bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2 text-xs text-red-300">
+          <div className="bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2 text-xs text-red-300 mb-3">
             {error}
           </div>
         )}
 
+        <div ref={contentRef} className={isHorizontal ? 'flex flex-row gap-3 w-max' : 'space-y-3'}>
         {/* Claude Code セクション */}
         {showClaude && (
           <ProviderSection
@@ -175,6 +194,7 @@ export function App() {
             showToken={settings.ccusage.claude.enabled}
             showBg={showBg}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('claude')}
+            className={isHorizontal ? 'flex-shrink-0' : undefined}
           />
         )}
 
@@ -217,8 +237,11 @@ export function App() {
             showToken={settings.ccusage.codex.enabled}
             showBg={showBg}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('codex')}
+            className={isHorizontal ? 'flex-shrink-0' : undefined}
           />
         )}
+
+        </div>
 
         {/* Empty state */}
         {!showClaude && !showCodex && (

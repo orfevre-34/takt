@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Settings, DisplayMode } from '../types';
+import type { Settings, DisplayMode, LayoutOrientation } from '../types';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -126,6 +126,21 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 }`}
               >
                 {mode === 'used' ? 'Used' : 'Remaining'}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 mb-2">
+            {(['vertical', 'horizontal'] as const).map((mode: LayoutOrientation) => (
+              <button
+                key={mode}
+                onClick={() => update('layout', mode)}
+                className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                  draft.layout === mode
+                    ? 'bg-zinc-700 text-zinc-100'
+                    : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {mode === 'vertical' ? 'Vertical' : 'Horizontal'}
               </button>
             ))}
           </div>

@@ -7,6 +7,9 @@ export type UsageWindowKind = 'primary' | 'secondary';
 // Display Mode
 export type DisplayMode = 'used' | 'remaining';
 
+// Layout Orientation
+export type LayoutOrientation = 'vertical' | 'horizontal';
+
 // Status Level
 export type StatusLevel = 'normal' | 'warning' | 'danger';
 
@@ -102,6 +105,7 @@ export interface Settings {
     codex: { primary: StatusThresholds; secondary: StatusThresholds };
   };
   displayMode: DisplayMode;
+  layout: LayoutOrientation;
   alwaysOnTop: boolean;
   language: 'ja' | 'en';
   cliPaths: {
@@ -149,7 +153,7 @@ export interface ElectronAPI {
   fetchUsage: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
   runCcusage: (provider: UsageProvider) => Promise<TokenUsageSnapshot | null>;
   setAlwaysOnTop: (value: boolean) => Promise<void>;
-  resizeToContent: (height: number) => void;
+  resizeToContent: (width: number | null, height: number) => void;
   getUsageSnapshot: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
   saveUsageSnapshot: (snapshot: UsageSnapshot) => Promise<void>;
   appQuit: () => void;

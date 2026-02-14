@@ -31,6 +31,7 @@ interface ProviderSectionProps {
   showToken: boolean;
   showBg?: boolean;
   onLogin?: () => void;
+  className?: string;
 }
 
 const PROVIDER_NAMES: Record<UsageProvider, string> = {
@@ -57,6 +58,7 @@ export function ProviderSection({
   showToken,
   showBg = true,
   onLogin,
+  className,
 }: ProviderSectionProps) {
   const windows = [primaryWindow, secondaryWindow].filter(Boolean) as UsageWindow[];
   const hasUsageData = windows.length > 0;
@@ -74,7 +76,7 @@ export function ProviderSection({
     : [];
 
   return (
-    <div className={`rounded-xl p-3 transition-all duration-300 ${showBg ? 'bg-zinc-800/50 border border-zinc-700/50' : 'bg-transparent border border-transparent'}`}>
+    <div className={`rounded-xl p-3 transition-all duration-300 ${showBg ? 'bg-zinc-800/50 border border-zinc-700/50' : 'bg-transparent border border-transparent'} ${className ?? ''}`}>
       {/* ヘッダー */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-zinc-200">

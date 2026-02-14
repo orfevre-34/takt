@@ -246,10 +246,10 @@ function setupIPC(): void {
       return { ok: false, error: err.message || String(err) };
     }
   });
-  ipcMain.on('resize-to-content', (_event, height: unknown) => {
+  ipcMain.on('resize-to-content', (_event, width: unknown, height: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
-    const width = mainWindow.getSize()[0] ?? 480;
-    mainWindow.setSize(width, Math.max(300, Math.min(Math.ceil(height), 900)));
+    const newWidth = typeof width === 'number' ? Math.max(380, Math.ceil(width)) : (mainWindow.getSize()[0] ?? 480);
+    mainWindow.setSize(newWidth, Math.max(300, Math.min(Math.ceil(height), 900)));
   });
   ipcMain.on('app-quit', () => app.quit());
   ipcMain.on('refresh-now', () => {

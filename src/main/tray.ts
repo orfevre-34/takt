@@ -41,7 +41,7 @@ export function createTray(mainWindow: BrowserWindow): void {
       type: 'checkbox',
       checked: mainWindow.isAlwaysOnTop(),
       click: (menuItem) => {
-        mainWindow.setAlwaysOnTop(menuItem.checked);
+        mainWindow.setAlwaysOnTop(menuItem.checked, 'normal');
       },
     },
     { type: 'separator' },

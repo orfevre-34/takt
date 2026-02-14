@@ -117,9 +117,9 @@ function createWindow(): void {
     },
   });
 
-  // transparent ウィンドウでは 'floating' レベルで確実に最前面に保つ
+  // 'normal' レベルで最前面に保つ（'floating' だとシステムトレイより上になる）
   if (alwaysOnTop) {
-    mainWindow.setAlwaysOnTop(true, 'floating');
+    mainWindow.setAlwaysOnTop(true, 'normal');
   }
 
   // ウィンドウ位置・サイズ変更時に保存（デバウンス付き）
@@ -170,7 +170,7 @@ function setupIPC(): void {
     saveSnapshot(filename, snapshot);
   });
   ipcMain.handle('set-always-on-top', (_event, value: boolean) => {
-    mainWindow?.setAlwaysOnTop(value, 'floating');
+    mainWindow?.setAlwaysOnTop(value, 'normal');
   });
   ipcMain.handle('run-ccusage', async (_event, provider: string) => {
     const settings = loadSettings() as any;

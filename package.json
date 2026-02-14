@@ -8,7 +8,8 @@
     "dev:renderer": "vite",
     "dev:main": "wait-on http://localhost:5173 && tsc -p tsconfig.main.json && cross-env NODE_ENV=development electron .",
     "build": "tsc -p tsconfig.main.json && vite build",
-    "package": "bun run build && electron-builder"
+    "generate-icons": "node scripts/generate-icons.mjs",
+    "package": "bun run generate-icons && bun run build && electron-builder"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -24,6 +25,8 @@
     "cross-env": "^10.1.0",
     "electron": "^36.3.1",
     "electron-builder": "^26.0.12",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",

@@ -63,6 +63,7 @@ function createWindow(): void {
     transparent: false,
     resizable: true,
     backgroundColor: '#18181b',
+    icon: path.join(__dirname, '../../build/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

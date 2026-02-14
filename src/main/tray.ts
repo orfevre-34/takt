@@ -4,8 +4,8 @@ import path from 'path';
 let tray: Tray | null = null;
 
 export function createTray(mainWindow: BrowserWindow): void {
-  // 16x16 の空アイコンを作成（後でカスタムアイコンに差し替え可能）
-  const icon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, '../../build/icon.ico');
+  const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
   tray.setToolTip('Takt - Usage Monitor');
 

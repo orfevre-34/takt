@@ -22,7 +22,7 @@ export function useUsage() {
           const result = await (window.electronAPI as any)?.fetchUsage('claude');
           if (result?.ok === false) {
             if (result.error === 'not_logged_in' || result.error === 'no_org_id') {
-              if (!cached) errors.push('Claude: ログインが必要です。設定からログインしてください。');
+              if (!cached) errors.push('Claude: Login required. Please log in from Settings.');
             } else if (result.error !== 'already_fetching') {
               errors.push(`Claude: ${result.error}`);
             }
@@ -40,7 +40,7 @@ export function useUsage() {
           const result = await (window.electronAPI as any)?.fetchUsage('codex');
           if (result?.ok === false) {
             if (result.error === 'not_logged_in') {
-              if (!cached) errors.push('Codex: ログインが必要です。設定からログインしてください。');
+              if (!cached) errors.push('Codex: Login required. Please log in from Settings.');
             } else if (result.error !== 'already_fetching') {
               errors.push(`Codex: ${result.error}`);
             }

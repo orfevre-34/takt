@@ -96,13 +96,13 @@ export function ProviderSection({
       {showUsage && !hasUsageData && (
         <div className={hasTokenData ? 'mb-3' : ''}>
           <p className="text-xs text-zinc-500 mb-2">
-            データがありません。ログインしてください。
+            No data available. Please log in.
           </p>
           <button
             onClick={onLogin}
             className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-300 text-xs font-medium py-1.5 rounded border border-orange-700/40 transition-colors"
           >
-            {provider === 'claude' ? 'Claude.ai' : 'ChatGPT'} にログイン
+            Log in to {provider === 'claude' ? 'Claude.ai' : 'ChatGPT'}
           </button>
         </div>
       )}

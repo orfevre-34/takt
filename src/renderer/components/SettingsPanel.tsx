@@ -67,7 +67,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 onClick={() => (window.electronAPI as any)?.openLogin?.('claude')}
                 className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-300 text-xs font-medium py-1.5 rounded border border-orange-700/40 transition-colors"
               >
-                Claude.ai にログイン
+                Log in to Claude.ai
               </button>
               <input
                 type="text"
@@ -103,7 +103,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 onClick={() => (window.electronAPI as any)?.openLogin?.('codex')}
                 className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-300 text-xs font-medium py-1.5 rounded border border-orange-700/40 transition-colors"
               >
-                ChatGPT にログイン
+                Log in to ChatGPT
               </button>
             </div>
           )}

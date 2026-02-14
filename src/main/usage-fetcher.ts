@@ -135,7 +135,7 @@ export async function fetchClaudeUsage(): Promise<unknown> {
     // orgIdをCookieから取得
     const orgCookie = cookies.find(c => c.name === 'lastActiveOrg');
     if (!orgCookie) {
-      return { ok: false, error: 'no_org_id', message: 'Organization IDが見つかりません。claude.aiにログインし直してください。' };
+      return { ok: false, error: 'no_org_id', message: 'Organization ID not found. Please log in to claude.ai again.' };
     }
     const orgId = orgCookie.value;
 

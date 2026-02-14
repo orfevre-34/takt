@@ -1,7 +1,5 @@
-import { useState } from 'react';
-import { UsageCard } from './components/UsageCard';
-import { TokenSummary } from './components/TokenSummary';
-import { Heatmap } from './components/Heatmap';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ProviderSection } from './components/ProviderSection';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useSettings } from './hooks/useSettings';
 import { useUsage } from './hooks/useUsage';
@@ -11,6 +9,22 @@ import { getStatusColor, getStatusLevel } from './utils/colors';
 import { formatTimeRemaining } from './utils/format';
 
 export function App() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const resizeToFit = useCallback(() => {
+    if (!containerRef.current) return;
+    const height = containerRef.current.scrollHeight;
+    window.electronAPI?.resizeToContent(height);
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => resizeToFit());
+    observer.observe(el);
+    resizeToFit();
+    return () => observer.disconnect();
+  }, [resizeToFit]);
   const { settings, updateSettings } = useSettings();
   const { claudeUsage, codexUsage, refresh: refreshUsage } = useUsage();
   const { claudeTokenUsage, codexTokenUsage } = useTokenUsage();
@@ -33,9 +47,17 @@ export function App() {
 
   const handleMouseUp = () => setIsDragging(false);
 
+  const showClaude =
+    settings.providers.claude.enabled ||
+    (settings.ccusage.claude.enabled && !!claudeTokenUsage);
+  const showCodex =
+    settings.providers.codex.enabled ||
+    (settings.ccusage.codex.enabled && !!codexTokenUsage);
+
   return (
     <div
-      className="min-h-screen bg-zinc-900 text-zinc-100 select-none"
+      ref={containerRef}
+      className="bg-zinc-900 text-zinc-100 select-none"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -76,8 +98,7 @@ export function App() {
 
       {/* Content */}
       <div
-        className="p-3 space-y-3 overflow-y-auto"
-        style={{ maxHeight: 'calc(100vh - 44px)' }}
+        className="p-3 space-y-3"
         data-no-drag
       >
         {/* Error message */}
@@ -87,9 +108,9 @@ export function App() {
           </div>
         )}
 
-        {/* Claude Usage */}
-        {settings.providers.claude.enabled && (
-          <UsageCard
+        {/* Claude Code セクション */}
+        {showClaude && (
+          <ProviderSection
             provider="claude"
             primaryWindow={claudeUsage?.primaryWindow ?? null}
             secondaryWindow={claudeUsage?.secondaryWindow ?? null}
@@ -110,13 +131,27 @@ export function App() {
               )
             }
             formatTime={formatTimeRemaining}
-            fetchedAt={claudeUsage?.fetchedAt}
+            usageFetchedAt={claudeUsage?.fetchedAt}
+            tokenUsage={
+              claudeTokenUsage
+                ? {
+                    today: claudeTokenUsage.today,
+                    thisWeek: claudeTokenUsage.thisWeek,
+                    thisMonth: claudeTokenUsage.thisMonth,
+                    dailyUsage: claudeTokenUsage.dailyUsage,
+                    fetchedAt: claudeTokenUsage.fetchedAt,
+                  }
+                : null
+            }
+            showUsage={settings.providers.claude.enabled}
+            showToken={settings.ccusage.claude.enabled}
+            onLogin={() => (window.electronAPI as any)?.openLogin?.('claude')}
           />
         )}
 
-        {/* Codex Usage */}
-        {settings.providers.codex.enabled && (
-          <UsageCard
+        {/* Codex セクション */}
+        {showCodex && (
+          <ProviderSection
             provider="codex"
             primaryWindow={codexUsage?.primaryWindow ?? null}
             secondaryWindow={codexUsage?.secondaryWindow ?? null}
@@ -137,48 +172,26 @@ export function App() {
               )
             }
             formatTime={formatTimeRemaining}
-            fetchedAt={codexUsage?.fetchedAt}
+            usageFetchedAt={codexUsage?.fetchedAt}
+            tokenUsage={
+              codexTokenUsage
+                ? {
+                    today: codexTokenUsage.today,
+                    thisWeek: codexTokenUsage.thisWeek,
+                    thisMonth: codexTokenUsage.thisMonth,
+                    dailyUsage: codexTokenUsage.dailyUsage,
+                    fetchedAt: codexTokenUsage.fetchedAt,
+                  }
+                : null
+            }
+            showUsage={settings.providers.codex.enabled}
+            showToken={settings.ccusage.codex.enabled}
+            onLogin={() => (window.electronAPI as any)?.openLogin?.('codex')}
           />
         )}
 
-        {/* Claude Token Usage */}
-        {settings.ccusage.claude.enabled && claudeTokenUsage && (
-          <>
-            <TokenSummary
-              provider="claude"
-              today={claudeTokenUsage.today}
-              thisWeek={claudeTokenUsage.thisWeek}
-              thisMonth={claudeTokenUsage.thisMonth}
-              fetchedAt={claudeTokenUsage.fetchedAt}
-            />
-            {claudeTokenUsage.dailyUsage.length > 0 && (
-              <div className="bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50">
-                <Heatmap dailyUsage={claudeTokenUsage.dailyUsage} />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Codex Token Usage */}
-        {settings.ccusage.codex.enabled && codexTokenUsage && (
-          <>
-            <TokenSummary
-              provider="codex"
-              today={codexTokenUsage.today}
-              thisWeek={codexTokenUsage.thisWeek}
-              thisMonth={codexTokenUsage.thisMonth}
-              fetchedAt={codexTokenUsage.fetchedAt}
-            />
-            {codexTokenUsage.dailyUsage.length > 0 && (
-              <div className="bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50">
-                <Heatmap dailyUsage={codexTokenUsage.dailyUsage} />
-              </div>
-            )}
-          </>
-        )}
-
         {/* Empty state */}
-        {!settings.providers.claude.enabled && !settings.providers.codex.enabled && (
+        {!showClaude && !showCodex && (
           <div className="text-center py-12">
             <p className="text-zinc-500 text-sm">No provider selected</p>
             <button

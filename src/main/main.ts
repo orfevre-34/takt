@@ -55,10 +55,10 @@ function saveSnapshot(filename: string, data: unknown): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 650,
-    minWidth: 320,
-    minHeight: 400,
+    width: 480,
+    height: 640,
+    minWidth: 380,
+    minHeight: 300,
     frame: false,
     transparent: false,
     resizable: true,
@@ -170,6 +170,11 @@ function setupIPC(): void {
     } catch (err: any) {
       return { ok: false, error: err.message || String(err) };
     }
+  });
+  ipcMain.on('resize-to-content', (_event, height: unknown) => {
+    if (!mainWindow || typeof height !== 'number') return;
+    const width = mainWindow.getSize()[0] ?? 480;
+    mainWindow.setSize(width, Math.max(300, Math.min(Math.ceil(height), 900)));
   });
   ipcMain.on('app-quit', () => app.quit());
   ipcMain.on('refresh-now', () => {

@@ -51,7 +51,7 @@ export function createTray(mainWindow: BrowserWindow): void {
   tray.setContextMenu(contextMenu);
   tray.on('click', () => {
     if (mainWindow.isVisible()) {
-      mainWindow.focus();
+      mainWindow.hide();
     } else {
       mainWindow.show();
       mainWindow.focus();

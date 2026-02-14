@@ -8,6 +8,7 @@ import { clearLog, log, getLogPath } from './logger';
 
 let mainWindow: BrowserWindow | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+let isQuitting = false;
 
 function getAppDataPath(): string {
   return path.join(app.getPath('appData'), 'Takt');
@@ -103,6 +104,7 @@ function createWindow(): void {
     minHeight: 300,
     frame: false,
     transparent: true,
+    skipTaskbar: true,
     resizable: true,
     alwaysOnTop,
     icon: path.join(__dirname, '../../build/icon.ico'),
@@ -130,10 +132,14 @@ function createWindow(): void {
   mainWindow.on('moved', debounceSaveBounds);
   mainWindow.on('resized', debounceSaveBounds);
 
-  // 閉じる直前に確実に保存
-  mainWindow.on('close', () => {
+  // 閉じるボタンではトレイに最小化（終了しない）
+  mainWindow.on('close', (e) => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
       saveWindowBounds(mainWindow.getBounds());
+    }
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow?.hide();
     }
   });
 
@@ -271,9 +277,14 @@ app.whenReady().then(() => {
   startScheduler(mainWindow!);
 });
 
+// トレイ常駐のため window-all-closed ではアプリを終了しない
 app.on('window-all-closed', () => {
+  // no-op: トレイに常駐し続ける
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
   stopScheduler();
-  app.quit();
 });
 
 app.on('activate', () => {

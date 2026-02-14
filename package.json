@@ -1,0 +1,32 @@
+{
+  "name": "takt",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"bun run dev:renderer\" \"bun run dev:main\"",
+    "dev:renderer": "vite",
+    "dev:main": "wait-on http://localhost:5173 && tsc -p tsconfig.main.json && cross-env NODE_ENV=development electron .",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "package": "bun run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.7",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
+    "electron": "^36.3.1",
+    "electron-builder": "^26.0.12",
+    "tailwindcss": "^4.1.7",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
+  }
+}

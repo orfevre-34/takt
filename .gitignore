@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# output
+dist/
+out/
+
+# packaged builds
+*.tgz
+
+# code coverage
+coverage/
+*.lcov
+
+# logs
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# dotenv environment variable files
+.env
+.env*.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+CLAUDE.md

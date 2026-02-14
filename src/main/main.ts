@@ -107,7 +107,9 @@ function createWindow(): void {
     skipTaskbar: true,
     resizable: true,
     alwaysOnTop,
-    icon: path.join(__dirname, '../../build/icon.ico'),
+    icon: app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.ico')
+      : path.join(__dirname, '../../build/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

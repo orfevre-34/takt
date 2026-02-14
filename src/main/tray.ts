@@ -1,10 +1,17 @@
-import { Tray, Menu, nativeImage, BrowserWindow } from 'electron';
+import { Tray, Menu, nativeImage, BrowserWindow, app } from 'electron';
 import path from 'path';
 
 let tray: Tray | null = null;
 
+function getIconPath(filename: string): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, filename);
+  }
+  return path.join(__dirname, '../../build', filename);
+}
+
 export function createTray(mainWindow: BrowserWindow): void {
-  const iconPath = path.join(__dirname, '../../build/icon.ico');
+  const iconPath = getIconPath('icon.ico');
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
   tray.setToolTip('Takt - Usage Monitor');

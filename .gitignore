@@ -6,6 +6,7 @@ dist/
 out/
 
 # packaged builds
+release/
 *.tgz
 
 # code coverage

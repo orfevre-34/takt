@@ -1,8 +1,8 @@
-import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { getDataDir } from './paths';
 
-const LOG_FILE = path.join(app.getPath('appData'), 'Takt', 'debug.log');
+const LOG_FILE = path.join(getDataDir(), 'debug.log');
 
 export function log(...args: unknown[]): void {
   const timestamp = new Date().toISOString();

@@ -5,13 +5,14 @@ import { createTray } from './tray';
 import { startScheduler, stopScheduler } from './scheduler';
 import { openLoginWindow, fetchClaudeUsage, fetchCodexUsage } from './usage-fetcher';
 import { clearLog, log, getLogPath } from './logger';
+import { getDataDir } from './paths';
 
 let mainWindow: BrowserWindow | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 
 function getAppDataPath(): string {
-  return path.join(app.getPath('appData'), 'Takt');
+  return getDataDir();
 }
 
 function ensureAppDataDir(): void {

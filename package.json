@@ -17,7 +17,7 @@
     "appId": "com.takt.app",
     "productName": "takt",
     "directories": {
-      "output": "dist",
+      "output": "release",
       "buildResources": "build"
     },
     "files": [
@@ -35,8 +35,23 @@
       }
     ],
     "win": {
-      "target": "dir",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerSidebar": null,
+      "shortcutName": "Takt"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
     }
   },
   "dependencies": {

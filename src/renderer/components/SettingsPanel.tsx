@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import type { Settings, DisplayMode, LayoutOrientation } from '../types';
 
 interface SettingsPanelProps {
@@ -8,19 +7,8 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps) {
-  const [draft, setDraft] = useState<Settings>(settings);
-
-  useEffect(() => {
-    setDraft(settings);
-  }, [settings]);
-
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSave = () => {
-    onSave(draft);
-    onClose();
+    onSave({ ...settings, [key]: value });
   };
 
   return (
@@ -50,18 +38,18 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 mb-2 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.providers.claude.enabled}
+              checked={settings.providers.claude.enabled}
               onChange={(e) =>
                 update('providers', {
-                  ...draft.providers,
-                  claude: { ...draft.providers.claude, enabled: e.target.checked },
+                  ...settings.providers,
+                  claude: { ...settings.providers.claude, enabled: e.target.checked },
                 })
               }
               className="accent-green-500"
             />
             Claude Code
           </label>
-          {draft.providers.claude.enabled && (
+          {settings.providers.claude.enabled && (
             <div className="ml-6 mb-2 space-y-1.5">
               <button
                 onClick={() => (window.electronAPI as any)?.openLogin?.('claude')}
@@ -71,11 +59,11 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               </button>
               <input
                 type="text"
-                value={draft.providers.claude.orgId}
+                value={settings.providers.claude.orgId}
                 onChange={(e) =>
                   update('providers', {
-                    ...draft.providers,
-                    claude: { ...draft.providers.claude, orgId: e.target.value },
+                    ...settings.providers,
+                    claude: { ...settings.providers.claude, orgId: e.target.value },
                   })
                 }
                 placeholder="Organization ID (auto-detected)"
@@ -86,10 +74,10 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.providers.codex.enabled}
+              checked={settings.providers.codex.enabled}
               onChange={(e) =>
                 update('providers', {
-                  ...draft.providers,
+                  ...settings.providers,
                   codex: { enabled: e.target.checked },
                 })
               }
@@ -97,7 +85,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
             />
             Codex
           </label>
-          {draft.providers.codex.enabled && (
+          {settings.providers.codex.enabled && (
             <div className="ml-6 mt-1.5">
               <button
                 onClick={() => (window.electronAPI as any)?.openLogin?.('codex')}
@@ -120,7 +108,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 key={mode}
                 onClick={() => update('displayMode', mode)}
                 className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  draft.displayMode === mode
+                  settings.displayMode === mode
                     ? 'bg-zinc-700 text-zinc-100'
                     : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
                 }`}
@@ -135,7 +123,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 key={mode}
                 onClick={() => update('layout', mode)}
                 className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  draft.layout === mode
+                  settings.layout === mode
                     ? 'bg-zinc-700 text-zinc-100'
                     : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
                 }`}
@@ -147,7 +135,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.alwaysOnTop}
+              checked={settings.alwaysOnTop}
               onChange={(e) => update('alwaysOnTop', e.target.checked)}
               className="accent-green-500"
             />
@@ -156,13 +144,13 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 mt-2 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.transparentWhenInactive}
+              checked={settings.transparentWhenInactive}
               onChange={(e) => update('transparentWhenInactive', e.target.checked)}
               className="accent-green-500"
             />
             Transparent When Inactive
           </label>
-          <div className={`mt-2 ${draft.transparentWhenInactive ? '' : 'opacity-40 pointer-events-none'}`}>
+          <div className={`mt-2 ${settings.transparentWhenInactive ? '' : 'opacity-40 pointer-events-none'}`}>
             <label className="text-xs text-zinc-400 mb-1 block">
               Background Opacity
             </label>
@@ -171,13 +159,13 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
                 type="range"
                 min={0}
                 max={100}
-                value={draft.backgroundOpacity}
+                value={settings.backgroundOpacity}
                 onChange={(e) => update('backgroundOpacity', Number(e.target.value))}
                 className="flex-1 accent-green-500"
-                disabled={!draft.transparentWhenInactive}
+                disabled={!settings.transparentWhenInactive}
               />
               <span className="text-xs text-zinc-400 w-8 text-right">
-                {draft.backgroundOpacity}%
+                {settings.backgroundOpacity}%
               </span>
             </div>
           </div>
@@ -193,12 +181,12 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               type="range"
               min={1}
               max={10}
-              value={draft.refreshIntervalMinutes}
+              value={settings.refreshIntervalMinutes}
               onChange={(e) => update('refreshIntervalMinutes', Number(e.target.value))}
               className="flex-1 accent-green-500"
             />
             <span className="text-xs text-zinc-400 w-8 text-right">
-              {draft.refreshIntervalMinutes}m
+              {settings.refreshIntervalMinutes}m
             </span>
           </div>
         </section>
@@ -211,11 +199,11 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 mb-1 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.ccusage.claude.enabled}
+              checked={settings.ccusage.claude.enabled}
               onChange={(e) =>
                 update('ccusage', {
-                  ...draft.ccusage,
-                  claude: { ...draft.ccusage.claude, enabled: e.target.checked },
+                  ...settings.ccusage,
+                  claude: { ...settings.ccusage.claude, enabled: e.target.checked },
                 })
               }
               className="accent-green-500"
@@ -225,11 +213,11 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <label className="flex items-center gap-2 text-sm text-zinc-300">
             <input
               type="checkbox"
-              checked={draft.ccusage.codex.enabled}
+              checked={settings.ccusage.codex.enabled}
               onChange={(e) =>
                 update('ccusage', {
-                  ...draft.ccusage,
-                  codex: { ...draft.ccusage.codex, enabled: e.target.checked },
+                  ...settings.ccusage,
+                  codex: { ...settings.ccusage.codex, enabled: e.target.checked },
                 })
               }
               className="accent-green-500"
@@ -248,9 +236,9 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               <label className="text-[10px] text-zinc-500 mb-0.5 block">{key}</label>
               <input
                 type="text"
-                value={draft.cliPaths[key]}
+                value={settings.cliPaths[key]}
                 onChange={(e) =>
-                  update('cliPaths', { ...draft.cliPaths, [key]: e.target.value })
+                  update('cliPaths', { ...settings.cliPaths, [key]: e.target.value })
                 }
                 className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300"
               />
@@ -258,21 +246,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           ))}
         </section>
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleSave}
-            className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-medium py-2 rounded transition-colors"
-          >
-            Save
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium py-2 rounded transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
     </div>
   );

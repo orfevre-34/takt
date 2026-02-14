@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: Settings = {
   },
   colors: { normal: '#22c55e', warning: '#f59e0b', danger: '#ef4444' },
   transparentWhenInactive: true,
+  backgroundOpacity: 80,
 };
 
 export function useSettings() {

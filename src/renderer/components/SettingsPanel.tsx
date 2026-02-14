@@ -162,6 +162,25 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
             />
             Transparent When Inactive
           </label>
+          <div className={`mt-2 ${draft.transparentWhenInactive ? '' : 'opacity-40 pointer-events-none'}`}>
+            <label className="text-xs text-zinc-400 mb-1 block">
+              Background Opacity
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={draft.backgroundOpacity}
+                onChange={(e) => update('backgroundOpacity', Number(e.target.value))}
+                className="flex-1 accent-green-500"
+                disabled={!draft.transparentWhenInactive}
+              />
+              <span className="text-xs text-zinc-400 w-8 text-right">
+                {draft.backgroundOpacity}%
+              </span>
+            </div>
+          </div>
         </section>
 
         {/* Refresh */}

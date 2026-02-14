@@ -30,6 +30,7 @@ interface ProviderSectionProps {
   showUsage: boolean;
   showToken: boolean;
   showBg?: boolean;
+  backgroundOpacity?: number; // 0-100
   onLogin?: () => void;
   className?: string;
 }
@@ -57,6 +58,7 @@ export function ProviderSection({
   showUsage,
   showToken,
   showBg = true,
+  backgroundOpacity = 80,
   onLogin,
   className,
 }: ProviderSectionProps) {
@@ -76,7 +78,10 @@ export function ProviderSection({
     : [];
 
   return (
-    <div className={`rounded-xl p-3 transition-all duration-300 ${showBg ? 'bg-zinc-800/50 border border-zinc-700/50' : 'bg-transparent border border-transparent'} ${className ?? ''}`}>
+    <div
+      className={`rounded-xl p-3 transition-all duration-300 ${showBg ? 'bg-zinc-800/50 border border-zinc-700/50' : 'border border-transparent'} ${className ?? ''}`}
+      style={!showBg ? { backgroundColor: `rgba(39, 39, 42, ${backgroundOpacity / 100})` } : undefined}
+    >
       {/* ヘッダー */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-zinc-200">

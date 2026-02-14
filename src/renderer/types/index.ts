@@ -123,6 +123,7 @@ export interface Settings {
     danger: string;
   };
   transparentWhenInactive: boolean;
+  backgroundOpacity: number; // 0-100
 }
 
 export interface StatusThresholds {

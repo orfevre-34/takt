@@ -193,6 +193,7 @@ export function App() {
             showUsage={settings.providers.claude.enabled}
             showToken={settings.ccusage.claude.enabled}
             showBg={showBg}
+            backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('claude')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
           />
@@ -236,6 +237,7 @@ export function App() {
             showUsage={settings.providers.codex.enabled}
             showToken={settings.ccusage.codex.enabled}
             showBg={showBg}
+            backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('codex')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
           />

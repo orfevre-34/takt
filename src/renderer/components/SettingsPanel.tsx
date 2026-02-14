@@ -36,9 +36,9 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           <h2 className="text-base font-bold text-zinc-100">Settings</h2>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 text-lg"
+            className="text-zinc-500 hover:text-zinc-300 p-1"
           >
-            &times;
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 

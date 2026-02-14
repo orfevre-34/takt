@@ -118,6 +118,7 @@ export interface Settings {
     warning: string;
     danger: string;
   };
+  transparentWhenInactive: boolean;
 }
 
 export interface StatusThresholds {
@@ -137,7 +138,8 @@ export type IpcChannel =
   | 'save-usage-snapshot'
   | 'app-quit'
   | 'refresh-now'
-  | 'open-external';
+  | 'open-external'
+  | 'set-window-opacity';
 
 // Electron API exposed to renderer
 export interface ElectronAPI {
@@ -153,6 +155,8 @@ export interface ElectronAPI {
   appQuit: () => void;
   refreshNow: () => void;
   openExternal: (url: string) => void;
+  setWindowOpacity: (opacity: number) => void;
+  saveWindowBounds: () => void;
   onUsageUpdated: (callback: (snapshot: UsageSnapshot) => void) => () => void;
   onTokenUsageUpdated: (callback: (snapshot: TokenUsageSnapshot) => void) => () => void;
 }

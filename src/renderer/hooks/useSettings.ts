@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: Settings = {
     codex: { enabled: false, additionalArgs: '' },
   },
   colors: { normal: '#22c55e', warning: '#f59e0b', danger: '#ef4444' },
+  transparentWhenInactive: true,
 };
 
 export function useSettings() {

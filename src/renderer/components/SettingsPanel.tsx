@@ -138,6 +138,15 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
             />
             Always on Top
           </label>
+          <label className="flex items-center gap-2 mt-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={draft.transparentWhenInactive}
+              onChange={(e) => update('transparentWhenInactive', e.target.checked)}
+              className="accent-green-500"
+            />
+            Transparent When Inactive
+          </label>
         </section>
 
         {/* Refresh */}

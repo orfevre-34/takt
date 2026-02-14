@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { createTray } from './tray';
@@ -7,6 +7,7 @@ import { openLoginWindow, fetchClaudeUsage, fetchCodexUsage } from './usage-fetc
 import { clearLog, log, getLogPath } from './logger';
 
 let mainWindow: BrowserWindow | null = null;
+let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getAppDataPath(): string {
   return path.join(app.getPath('appData'), 'Takt');
@@ -53,22 +54,87 @@ function saveSnapshot(filename: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+interface WindowBounds { x: number; y: number; width: number; height: number }
+
+function loadWindowBounds(): WindowBounds | null {
+  const filePath = path.join(getAppDataPath(), 'window-bounds.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (typeof data.x === 'number' && typeof data.y === 'number') {
+        return data as WindowBounds;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveWindowBounds(bounds: WindowBounds): void {
+  const filePath = path.join(getAppDataPath(), 'window-bounds.json');
+  fs.writeFileSync(filePath, JSON.stringify(bounds), 'utf-8');
+}
+
+function isVisibleOnAnyDisplay(bounds: WindowBounds): boolean {
+  const displays = screen.getAllDisplays();
+  return displays.some((d) => {
+    const { x, y, width, height } = d.workArea;
+    // ウィンドウの少なくとも一部(100px)が画面内に収まっているか
+    return (
+      bounds.x + bounds.width > x + 100 &&
+      bounds.x < x + width - 100 &&
+      bounds.y < y + height - 100 &&
+      bounds.y + bounds.height > y + 100
+    );
+  });
+}
+
 function createWindow(): void {
+  const savedSettings = loadSettings() as any;
+  const alwaysOnTop = savedSettings?.alwaysOnTop ?? false;
+  const savedBounds = loadWindowBounds();
+  const useSaved = savedBounds && isVisibleOnAnyDisplay(savedBounds);
+
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 640,
+    width: useSaved ? savedBounds!.width : 480,
+    height: useSaved ? savedBounds!.height : 640,
+    x: useSaved ? savedBounds!.x : undefined,
+    y: useSaved ? savedBounds!.y : undefined,
     minWidth: 380,
     minHeight: 300,
     frame: false,
-    transparent: false,
+    transparent: true,
     resizable: true,
-    backgroundColor: '#18181b',
+    alwaysOnTop,
     icon: path.join(__dirname, '../../build/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
+  });
+
+  // transparent ウィンドウでは 'floating' レベルで確実に最前面に保つ
+  if (alwaysOnTop) {
+    mainWindow.setAlwaysOnTop(true, 'floating');
+  }
+
+  // ウィンドウ位置・サイズ変更時に保存（デバウンス付き）
+  const debounceSaveBounds = () => {
+    if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
+    saveBoundsTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+        saveWindowBounds(mainWindow.getBounds());
+      }
+    }, 500);
+  };
+  mainWindow.on('moved', debounceSaveBounds);
+  mainWindow.on('resized', debounceSaveBounds);
+
+  // 閉じる直前に確実に保存
+  mainWindow.on('close', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+      saveWindowBounds(mainWindow.getBounds());
+    }
   });
 
   if (process.env.NODE_ENV === 'development') {
@@ -96,7 +162,7 @@ function setupIPC(): void {
     saveSnapshot(filename, snapshot);
   });
   ipcMain.handle('set-always-on-top', (_event, value: boolean) => {
-    mainWindow?.setAlwaysOnTop(value);
+    mainWindow?.setAlwaysOnTop(value, 'floating');
   });
   ipcMain.handle('run-ccusage', async (_event, provider: string) => {
     const settings = loadSettings() as any;
@@ -183,6 +249,15 @@ function setupIPC(): void {
   });
   ipcMain.on('open-external', (_event, url: string) => {
     shell.openExternal(url);
+  });
+  ipcMain.on('set-window-opacity', (_event, opacity: unknown) => {
+    if (!mainWindow || typeof opacity !== 'number') return;
+    mainWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
+  });
+  ipcMain.on('save-window-bounds', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+      saveWindowBounds(mainWindow.getBounds());
+    }
   });
 }
 

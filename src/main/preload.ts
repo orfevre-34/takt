@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   appQuit: () => ipcRenderer.send('app-quit'),
   refreshNow: () => ipcRenderer.send('refresh-now'),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
+  setWindowOpacity: (opacity: number) => ipcRenderer.send('set-window-opacity', opacity),
+  saveWindowBounds: () => ipcRenderer.send('save-window-bounds'),
   onUsageUpdated: (callback: (snapshot: unknown) => void) => {
     const handler = (_event: unknown, snapshot: unknown) => callback(snapshot);
     ipcRenderer.on('usage-updated', handler);

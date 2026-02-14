@@ -29,6 +29,7 @@ interface ProviderSectionProps {
   } | null;
   showUsage: boolean;
   showToken: boolean;
+  showBg?: boolean;
   onLogin?: () => void;
 }
 
@@ -54,6 +55,7 @@ export function ProviderSection({
   tokenUsage,
   showUsage,
   showToken,
+  showBg = true,
   onLogin,
 }: ProviderSectionProps) {
   const windows = [primaryWindow, secondaryWindow].filter(Boolean) as UsageWindow[];
@@ -72,7 +74,7 @@ export function ProviderSection({
     : [];
 
   return (
-    <div className="bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50">
+    <div className={`rounded-xl p-3 transition-all duration-300 ${showBg ? 'bg-zinc-800/50 border border-zinc-700/50' : 'bg-transparent border border-transparent'}`}>
       {/* ヘッダー */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-zinc-200">
@@ -151,7 +153,9 @@ export function ProviderSection({
       {hasTokenData && (
         <div
           className={
-            hasUsageData ? 'mt-2 pt-2 border-t border-zinc-700/30' : ''
+            hasUsageData
+              ? `mt-2 pt-2 border-t transition-[border-color] duration-300 ${showBg ? 'border-zinc-700/30' : 'border-transparent'}`
+              : ''
           }
         >
           <div className="grid grid-cols-3 gap-2">

@@ -30,22 +30,51 @@ export function App() {
   const { claudeTokenUsage, codexTokenUsage } = useTokenUsage();
   const { settingsOpen, setSettingsOpen, loading, error } = useAppStore();
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState({ screenX: 0, screenY: 0, winX: 0, winY: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button, input, [data-no-drag]')) return;
     setIsDragging(true);
-    setDragOffset({ x: e.clientX, y: e.clientY });
+    setDragStart({
+      screenX: e.screenX,
+      screenY: e.screenY,
+      winX: window.screenX,
+      winY: window.screenY,
+    });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  // ドラッグ中は document レベルでマウスを追跡（ウィンドウ外でも途切れない）
+  useEffect(() => {
     if (!isDragging) return;
-    const dx = e.clientX - dragOffset.x;
-    const dy = e.clientY - dragOffset.y;
-    window.moveTo(window.screenX + dx, window.screenY + dy);
+    const handleMove = (e: MouseEvent) => {
+      window.moveTo(
+        dragStart.winX + (e.screenX - dragStart.screenX),
+        dragStart.winY + (e.screenY - dragStart.screenY),
+      );
+    };
+    const handleUp = () => {
+      setIsDragging(false);
+      window.electronAPI?.saveWindowBounds();
+    };
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDragging, dragStart]);
+
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleMouseEnter = () => setIsHovered(true);
+
+  const handleMouseLeave = () => {
+    if (isDragging) return;
+    setIsHovered(false);
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  // 背景透過が有効かどうか
+  const showBg = !settings.transparentWhenInactive || isHovered;
 
   const showClaude =
     settings.providers.claude.enabled ||
@@ -57,14 +86,13 @@ export function App() {
   return (
     <div
       ref={containerRef}
-      className="bg-zinc-900 text-zinc-100 select-none"
+      className={`text-zinc-100 select-none transition-[background-color] duration-300 ${showBg ? 'bg-zinc-900' : 'bg-transparent'}`}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Title bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
+      <div className={`flex items-center justify-between px-4 py-2 border-b transition-all duration-300 ${showBg ? 'border-zinc-800 opacity-100' : 'border-transparent opacity-0'}`}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold tracking-wide">Takt</span>
           {loading && (
@@ -145,6 +173,7 @@ export function App() {
             }
             showUsage={settings.providers.claude.enabled}
             showToken={settings.ccusage.claude.enabled}
+            showBg={showBg}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('claude')}
           />
         )}
@@ -186,6 +215,7 @@ export function App() {
             }
             showUsage={settings.providers.codex.enabled}
             showToken={settings.ccusage.codex.enabled}
+            showBg={showBg}
             onLogin={() => (window.electronAPI as any)?.openLogin?.('codex')}
           />
         )}

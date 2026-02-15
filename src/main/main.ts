@@ -30,6 +30,7 @@ import {
   type AnchorPosition,
   type AttachResponsiveness,
 } from './window-attach';
+import { getForegroundWindow, getWindowProcessId } from './win32';
 
 function parseCliArgs(str: string): string[] {
   const args: string[] = [];
@@ -444,6 +445,58 @@ function setupIPC(): void {
     const base = filePath.replace(/\\/g, '/').split('/').pop() || '';
     const processName = base.replace(/\.exe$/i, '').toLowerCase();
     return { processName, path: filePath };
+  });
+  ipcMain.handle('pick-foreground-window', async () => {
+    if (!mainWindow) return null;
+    const myPid = process.pid;
+
+    let wm: { getWindows(): { id: number; processId: number; path: string; getTitle(): string }[] };
+    try {
+      wm = require('node-window-manager').windowManager;
+    } catch (err: any) {
+      log('pick-foreground-window: failed to load node-window-manager:', err.message);
+      return null;
+    }
+
+    mainWindow.hide();
+
+    return new Promise<{ processName: string; path: string; title: string } | null>((resolve) => {
+      let resolved = false;
+      const cleanup = (result: { processName: string; path: string; title: string } | null) => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(pollTimer);
+        clearTimeout(fallbackTimer);
+        mainWindow?.show();
+        resolve(result);
+      };
+
+      const POLL_INTERVAL = 200;
+      const TIMEOUT = 10000;
+
+      const pollTimer = setInterval(() => {
+        try {
+          const fgHwnd = getForegroundWindow();
+          if (!fgHwnd) return;
+          const fgPid = getWindowProcessId(fgHwnd);
+          if (fgPid === myPid) return;
+
+          const windows = wm.getWindows();
+          const win = windows.find((w) => w.id === fgHwnd);
+          if (!win || !win.path) return;
+
+          const base = win.path.replace(/\\/g, '/').split('/').pop() || '';
+          const processName = base.replace(/\.exe$/i, '').toLowerCase();
+          const title = win.getTitle();
+          cleanup({ processName, path: win.path, title });
+        } catch (err: any) {
+          log('pick-foreground-window poll error:', err.message);
+          cleanup(null);
+        }
+      }, POLL_INTERVAL);
+
+      const fallbackTimer = setTimeout(() => cleanup(null), TIMEOUT);
+    });
   });
   ipcMain.handle('set-attach-target', (_event, processName: string, anchor: string) => {
     setTargetProcess(processName, anchor as AnchorPosition);

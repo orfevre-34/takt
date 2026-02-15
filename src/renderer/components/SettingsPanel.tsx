@@ -269,6 +269,19 @@ export function SettingsPanel({ settings, attachState, onSave, onClose }: Settin
               </div>
               <button
                 onClick={async () => {
+                  const result = await window.electronAPI?.pickForegroundWindow?.();
+                  if (result) {
+                    const updated = { ...windowAttach, enabled: true, targetProcessName: result.processName, targetPath: result.path };
+                    update('windowAttach', updated);
+                    await window.electronAPI?.setAttachTarget?.(result.processName, updated.anchor);
+                  }
+                }}
+                className="px-2.5 py-1.5 bg-blue-700/30 border border-blue-700/40 rounded text-xs text-blue-300 hover:bg-blue-700/50 transition-colors whitespace-nowrap"
+              >
+                Pick Window
+              </button>
+              <button
+                onClick={async () => {
                   const result = await window.electronAPI?.selectExecutable?.();
                   if (result) {
                     const updated = { ...windowAttach, enabled: true, targetProcessName: result.processName, targetPath: result.path };

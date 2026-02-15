@@ -136,6 +136,7 @@ export type IpcChannel =
   | 'open-external'
   | 'set-window-opacity'
   | 'select-executable'
+  | 'pick-foreground-window'
   | 'set-attach-target'
   | 'clear-attach-target'
   | 'detach-window'
@@ -199,6 +200,7 @@ export interface ElectronAPI {
   onAlwaysOnTopChanged: (callback: (value: boolean) => void) => () => void;
   onTriggerRefresh: (callback: () => void) => () => void;
   selectExecutable: () => Promise<{ processName: string; path: string } | null>;
+  pickForegroundWindow: () => Promise<{ processName: string; path: string; title: string } | null>;
   setAttachTarget: (processName: string, anchor: AnchorPosition) => Promise<void>;
   clearAttachTarget: () => Promise<void>;
   detachWindow: () => Promise<void>;

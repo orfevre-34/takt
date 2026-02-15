@@ -39,6 +39,7 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener('trigger-refresh', handler);
   },
   selectExecutable: () => ipcRenderer.invoke('select-executable'),
+  pickForegroundWindow: () => ipcRenderer.invoke('pick-foreground-window'),
   setAttachTarget: (processName, anchor) => ipcRenderer.invoke('set-attach-target', processName, anchor),
   clearAttachTarget: () => ipcRenderer.invoke('clear-attach-target'),
   detachWindow: () => ipcRenderer.invoke('detach-window'),

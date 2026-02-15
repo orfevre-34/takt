@@ -1,0 +1,365 @@
+import { BrowserWindow } from 'electron';
+import { log } from './logger';
+import { getAccurateWindowBounds, isValidWindow, isAppWindow, watchWindowPosition, type WindowBounds } from './win32';
+
+const { windowManager } = require('node-window-manager');
+
+interface WindowInfo {
+  id: number;
+  processId: number;
+  path: string;
+  getTitle(): string;
+}
+
+export type AnchorPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface AttachTarget {
+  processId: number;
+  title: string;
+  path: string;
+}
+
+export interface AttachState {
+  attached: boolean;
+  target: AttachTarget | null;
+  anchor: AnchorPosition;
+  targetProcessName: string;
+}
+
+const MINI_MIN_HEIGHT = 20;
+const MINI_MAX_HEIGHT = 150;
+const MINI_DEFAULT_HEIGHT = 40;
+const MARGIN_X = 12;
+const MARGIN_TOP = 40;
+const MARGIN_BOTTOM = 16;
+const SCAN_INTERVAL_MS = 2000;
+// ウィンドウ存在チェック用（イベント駆動では検知できない消失を補完）
+const ALIVE_CHECK_INTERVAL_MS = 1000;
+
+let mainWindowRef: BrowserWindow | null = null;
+let scanTimer: ReturnType<typeof setInterval> | null = null;
+let aliveCheckTimer: ReturnType<typeof setInterval> | null = null;
+let unwatchPosition: (() => void) | null = null;
+let targetHwnd: number | null = null;
+let targetInfo: AttachTarget | null = null;
+let currentAnchor: AnchorPosition = 'top-right';
+let configuredTargetProcessName = '';
+let previousBounds: WindowBounds | null = null;
+let previousAlwaysOnTop = false;
+let previousMinSize: [number, number] = [380, 150];
+let previousMaxSize: [number, number] = [10000, 10000];
+let isAttached = false;
+let wasHiddenByMinimize = false;
+let userOffsetX = 0;
+let userOffsetY = 0;
+let resizeHandler: (() => void) | null = null;
+let miniWidthResizeSuppressUntil = 0;
+let repositionTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getProcessName(exePath: string): string {
+  if (!exePath) return '';
+  const base = exePath.replace(/\\/g, '/').split('/').pop() || '';
+  return base.replace(/\.exe$/i, '').toLowerCase();
+}
+
+export function initWindowAttach(mainWindow: BrowserWindow): void {
+  mainWindowRef = mainWindow;
+}
+
+let savedMiniHeight = 0;
+
+export function startAutoAttach(targetProcessName: string, anchor: AnchorPosition, miniHeight?: number): void {
+  configuredTargetProcessName = targetProcessName.toLowerCase();
+  currentAnchor = anchor;
+  if (miniHeight && miniHeight > 0) savedMiniHeight = miniHeight;
+  stopAll();
+
+  if (!configuredTargetProcessName) return;
+
+  log('startAutoAttach: watching for', configuredTargetProcessName);
+  scanTimer = setInterval(() => tryAutoAttach(), SCAN_INTERVAL_MS);
+  tryAutoAttach();
+}
+
+export function setTargetProcess(processName: string, anchor: AnchorPosition): void {
+  if (isAttached) doDetach(false);
+  startAutoAttach(processName, anchor);
+  notifyStateChanged();
+}
+
+export function clearTargetProcess(): void {
+  if (isAttached) doDetach(false);
+  configuredTargetProcessName = '';
+  stopAll();
+  notifyStateChanged();
+}
+
+export function detach(): void {
+  if (isAttached) doDetach(true);
+  stopAll();
+  log('detach: manual detach, target config kept:', configuredTargetProcessName);
+}
+
+export function reattach(): void {
+  if (!configuredTargetProcessName) return;
+  if (isAttached) return;
+  stopAll();
+  scanTimer = setInterval(() => tryAutoAttach(), SCAN_INTERVAL_MS);
+  tryAutoAttach();
+  notifyStateChanged();
+}
+
+export function setAnchor(anchor: AnchorPosition): void {
+  currentAnchor = anchor;
+  if (isAttached && targetHwnd) {
+    const bounds = getAccurateWindowBounds(targetHwnd);
+    if (bounds) updatePosition(bounds);
+  }
+  notifyStateChanged();
+}
+
+export function setUserOffset(ox: number, oy: number): void {
+  userOffsetX = ox;
+  userOffsetY = oy;
+  if (isAttached && targetHwnd) {
+    const bounds = getAccurateWindowBounds(targetHwnd);
+    if (bounds) updatePosition(bounds);
+  }
+}
+
+export function getUserOffset(): { x: number; y: number } {
+  return { x: userOffsetX, y: userOffsetY };
+}
+
+export function setMiniWidth(width: number): void {
+  if (!isAttached || !mainWindowRef || mainWindowRef.isDestroyed()) return;
+  const w = Math.max(40, Math.ceil(width));
+  const [curW, curH] = mainWindowRef.getContentSize();
+
+  const [minW, minH] = mainWindowRef.getMinimumSize();
+  if (minW !== w || minH !== MINI_MIN_HEIGHT) {
+    mainWindowRef.setMinimumSize(w, MINI_MIN_HEIGHT);
+  }
+
+  const [maxW, maxH] = mainWindowRef.getMaximumSize();
+  if (maxW !== w || maxH !== MINI_MAX_HEIGHT) {
+    mainWindowRef.setMaximumSize(w, MINI_MAX_HEIGHT);
+  }
+
+  if (curW !== w) {
+    // setContentSize による内部リサイズ通知は、renderer への高さ通知を一時抑止する
+    miniWidthResizeSuppressUntil = Date.now() + 80;
+    mainWindowRef.setContentSize(w, curH ?? MINI_DEFAULT_HEIGHT);
+  }
+
+  repositionToAnchor();
+}
+
+export function isMiniWidthResizeSuppressed(): boolean {
+  return Date.now() < miniWidthResizeSuppressUntil;
+}
+
+function repositionToAnchor(): void {
+  if (!isAttached || !targetHwnd || !mainWindowRef || mainWindowRef.isDestroyed()) return;
+  const bounds = getAccurateWindowBounds(targetHwnd);
+  if (bounds) updatePosition(bounds);
+}
+
+export function getAttachState(): AttachState {
+  return {
+    attached: isAttached,
+    target: targetInfo,
+    anchor: currentAnchor,
+    targetProcessName: configuredTargetProcessName,
+  };
+}
+
+export function isWindowAttached(): boolean {
+  return isAttached;
+}
+
+export function cleanupWindowAttach(): void {
+  stopAll();
+  if (isAttached) doDetach(false);
+  mainWindowRef = null;
+}
+
+// --- 内部 ---
+
+function stopAll(): void {
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (aliveCheckTimer) { clearInterval(aliveCheckTimer); aliveCheckTimer = null; }
+  if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
+  if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
+}
+
+function scheduleReposition(): void {
+  if (repositionTimer) return;
+  repositionTimer = setTimeout(() => {
+    repositionTimer = null;
+    repositionToAnchor();
+  }, 16);
+}
+
+function findTargetHwnd(): { hwnd: number; info: WindowInfo } | null {
+  try {
+    const windows: WindowInfo[] = windowManager.getWindows();
+    let best: { hwnd: number; info: WindowInfo; area: number } | null = null;
+
+    for (const win of windows) {
+      try {
+        if (getProcessName(win.path) !== configuredTargetProcessName) continue;
+        if (!isAppWindow(win.id)) continue;
+        const bounds = getAccurateWindowBounds(win.id);
+        if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
+        const area = bounds.width * bounds.height;
+        if (!best || area > best.area) {
+          best = { hwnd: win.id, info: win, area };
+        }
+      } catch { /* ignore */ }
+    }
+    return best;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function tryAutoAttach(): void {
+  if (!configuredTargetProcessName || !mainWindowRef || mainWindowRef.isDestroyed()) return;
+  if (isAttached) return;
+
+  const found = findTargetHwnd();
+  if (!found) return;
+
+  const { hwnd, info } = found;
+  const bounds = getAccurateWindowBounds(hwnd);
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
+  let title: string;
+  try { title = info.getTitle() || configuredTargetProcessName; } catch { title = configuredTargetProcessName; }
+
+  log('tryAutoAttach: found', title, 'hwnd:', hwnd, 'bounds:', JSON.stringify(bounds));
+
+  previousBounds = mainWindowRef.getBounds();
+  previousAlwaysOnTop = mainWindowRef.isAlwaysOnTop();
+  previousMinSize = mainWindowRef.getMinimumSize() as [number, number];
+  previousMaxSize = mainWindowRef.getMaximumSize() as [number, number];
+
+  targetHwnd = hwnd;
+  targetInfo = { processId: info.processId, title, path: info.path || '' };
+  isAttached = true;
+  wasHiddenByMinimize = false;
+
+  const initH = savedMiniHeight > 0 ? Math.max(MINI_MIN_HEIGHT, Math.min(MINI_MAX_HEIGHT, savedMiniHeight)) : MINI_DEFAULT_HEIGHT;
+  mainWindowRef.setMinimumSize(100, MINI_MIN_HEIGHT);
+  mainWindowRef.setMaximumSize(2000, MINI_MAX_HEIGHT);
+  mainWindowRef.setContentSize(200, initH);
+  mainWindowRef.setAlwaysOnTop(true, 'screen-saver');
+
+  if (!mainWindowRef.isVisible()) mainWindowRef.show();
+
+  updatePosition(bounds);
+
+  resizeHandler = () => {
+    if (isMiniWidthResizeSuppressed()) return;
+    scheduleReposition();
+  };
+  mainWindowRef.on('resize', resizeHandler);
+
+  // スキャン停止 → イベント駆動追従 + 存在チェックポーリング
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+
+  unwatchPosition = watchWindowPosition(
+    hwnd,
+    (b) => updatePosition(b),
+    () => {
+      if (mainWindowRef && !mainWindowRef.isDestroyed() && mainWindowRef.isVisible()) {
+        mainWindowRef.hide();
+        wasHiddenByMinimize = true;
+      }
+    },
+    () => {
+      if (mainWindowRef && !mainWindowRef.isDestroyed() && wasHiddenByMinimize) {
+        mainWindowRef.show();
+        wasHiddenByMinimize = false;
+      }
+    },
+  );
+
+  aliveCheckTimer = setInterval(() => {
+    if (!targetHwnd || !isValidWindow(targetHwnd)) {
+      log('aliveCheck: target disappeared');
+      doDetach(true);
+      startAutoAttach(configuredTargetProcessName, currentAnchor);
+    }
+  }, ALIVE_CHECK_INTERVAL_MS);
+
+  log('attached to', title, 'hwnd:', hwnd);
+  notifyStateChanged();
+}
+
+function doDetach(notify: boolean): void {
+  if (aliveCheckTimer) { clearInterval(aliveCheckTimer); aliveCheckTimer = null; }
+  if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
+  if (resizeHandler && mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.removeListener('resize', resizeHandler);
+    resizeHandler = null;
+  }
+  if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
+
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.setMinimumSize(previousMinSize[0], previousMinSize[1]);
+    mainWindowRef.setMaximumSize(previousMaxSize[0], previousMaxSize[1]);
+    mainWindowRef.setAlwaysOnTop(previousAlwaysOnTop, 'normal');
+
+    if (previousBounds) {
+      mainWindowRef.setBounds(previousBounds);
+      previousBounds = null;
+    }
+
+    if (wasHiddenByMinimize) {
+      mainWindowRef.show();
+      wasHiddenByMinimize = false;
+    }
+  }
+
+  targetHwnd = null;
+  targetInfo = null;
+  isAttached = false;
+
+  if (notify) notifyStateChanged();
+}
+
+function updatePosition(tb: WindowBounds): void {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+
+  const sz = mainWindowRef.getSize();
+  const curW = sz[0] ?? 200;
+  const curH = sz[1] ?? MINI_DEFAULT_HEIGHT;
+  log('updatePosition: target=', JSON.stringify(tb), 'mySize=', curW, curH, 'offset=', userOffsetX, userOffsetY);
+  let x: number, y: number;
+  switch (currentAnchor) {
+    case 'top-left':
+      x = tb.x + MARGIN_X;
+      y = tb.y + MARGIN_TOP;
+      break;
+    case 'top-right':
+      x = tb.x + tb.width - curW - MARGIN_X;
+      y = tb.y + MARGIN_TOP;
+      break;
+    case 'bottom-left':
+      x = tb.x + MARGIN_X;
+      y = tb.y + tb.height - curH - MARGIN_BOTTOM;
+      break;
+    case 'bottom-right':
+      x = tb.x + tb.width - curW - MARGIN_X;
+      y = tb.y + tb.height - curH - MARGIN_BOTTOM;
+      break;
+  }
+  mainWindowRef.setPosition(Math.round(x + userOffsetX), Math.round(y + userOffsetY));
+}
+
+function notifyStateChanged(): void {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.webContents.send('attach-state-changed', getAttachState());
+  }
+}

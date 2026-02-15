@@ -1,5 +1,6 @@
 import { Tray, Menu, nativeImage, BrowserWindow, app } from 'electron';
 import path from 'path';
+import { getAttachState, detach as detachWindow } from './window-attach';
 
 let tray: Tray | null = null;
 let mainWindowRef: BrowserWindow | null = null;
@@ -43,6 +44,24 @@ function buildContextMenu(): Menu {
         mainWindow.webContents.send('always-on-top-changed', menuItem.checked);
       },
     },
+    { type: 'separator' },
+    (() => {
+      const state = getAttachState();
+      if (state.attached) {
+        return {
+          label: `Detach from ${state.target?.title ?? 'window'}`,
+          click: () => detachWindow(),
+        };
+      }
+      return {
+        label: 'Attach to Window...',
+        click: () => {
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('open-attach-settings');
+        },
+      };
+    })(),
     { type: 'separator' },
     {
       label: 'Quit',

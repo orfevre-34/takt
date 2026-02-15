@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ProviderSection } from './components/ProviderSection';
 import { SettingsPanel } from './components/SettingsPanel';
+import { MiniView } from './components/MiniView';
 import { useSettings } from './hooks/useSettings';
 import { useUsage } from './hooks/useUsage';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useAppStore } from './store';
 import { getStatusColor } from './utils/colors';
 import { formatTimeRemaining } from './utils/format';
+import type { AttachState } from './types';
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -17,8 +19,27 @@ export function App() {
   const { settingsOpen, setSettingsOpen, loading, error } = useAppStore();
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ screenX: 0, screenY: 0, winX: 0, winY: 0 });
+  const [attachState, setAttachState] = useState<AttachState>({ attached: false, target: null, anchor: 'top-right', targetProcessName: '' });
+
+  // アタッチ状態の初期取得 + 購読
+  useEffect(() => {
+    window.electronAPI?.getAttachState?.().then(setAttachState).catch(() => {});
+    const cleanup = window.electronAPI?.onAttachStateChanged?.((state: AttachState) => {
+      setAttachState(state);
+    });
+    return cleanup;
+  }, []);
+
+  // トレイメニューから設定を開く
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onOpenAttachSettings?.(() => {
+      setSettingsOpen(true);
+    });
+    return cleanup;
+  }, [setSettingsOpen]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (attachState.attached) return;
     if ((e.target as HTMLElement).closest('button, input, [data-no-drag]')) return;
     setIsDragging(true);
     setDragStart({
@@ -83,13 +104,14 @@ export function App() {
   }, [isHorizontal]);
 
   useEffect(() => {
+    if (attachState.attached) return;
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => resizeToFit());
     observer.observe(el);
     resizeToFit();
     return () => observer.disconnect();
-  }, [resizeToFit]);
+  }, [resizeToFit, attachState.attached]);
 
   // 横→縦切替時にウィンドウ幅をデフォルトにリセット
   const prevLayoutRef = useRef(settings.layout);
@@ -100,6 +122,30 @@ export function App() {
     }
     prevLayoutRef.current = settings.layout;
   }, [settings.layout]);
+
+  // アタッチモード: MiniView を表示
+  if (attachState.attached) {
+    return (
+      <>
+        <MiniView
+          claudeUsage={claudeUsage}
+          codexUsage={codexUsage}
+          settings={settings}
+          onDetach={() => window.electronAPI?.detachWindow?.()}
+          onOffsetChange={(ox, oy) => {
+            updateSettings({ ...settings, windowAttach: { ...settings.windowAttach, offsetX: ox, offsetY: oy } });
+          }}
+        />
+        {settingsOpen && (
+          <SettingsPanel
+            settings={settings}
+            onSave={updateSettings}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div

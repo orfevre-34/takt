@@ -6,6 +6,22 @@ import { startScheduler, stopScheduler } from './scheduler';
 import { openLoginWindow, fetchClaudeUsage, fetchCodexUsage } from './usage-fetcher';
 import { clearLog, log, getLogPath } from './logger';
 import { getDataDir } from './paths';
+import {
+  initWindowAttach,
+  startAutoAttach,
+  setTargetProcess,
+  clearTargetProcess,
+  detach as detachWindow,
+  reattach as reattachWindow,
+  setAnchor,
+  setUserOffset,
+  getUserOffset,
+  setMiniWidth,
+  isMiniWidthResizeSuppressed,
+  getAttachState,
+  isWindowAttached,
+  cleanupWindowAttach,
+} from './window-attach';
 
 let mainWindow: BrowserWindow | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,6 +92,39 @@ function saveWindowBounds(bounds: WindowBounds): void {
   fs.writeFileSync(filePath, JSON.stringify(bounds), 'utf-8');
 }
 
+function saveMiniHeightToSettings(height: number): void {
+  if (!Number.isFinite(height) || height <= 0) return;
+  const current = loadSettings();
+  const currentWindowAttach = (current.windowAttach && typeof current.windowAttach === 'object')
+    ? current.windowAttach as Record<string, unknown>
+    : {};
+  saveSettings({
+    ...current,
+    windowAttach: {
+      ...currentWindowAttach,
+      miniHeight: Math.ceil(height),
+    },
+  });
+}
+
+function mergeSettings(current: Record<string, unknown>, incoming: Record<string, unknown>): Record<string, unknown> {
+  const currentWindowAttach = (current.windowAttach && typeof current.windowAttach === 'object')
+    ? current.windowAttach as Record<string, unknown>
+    : {};
+  const incomingWindowAttach = (incoming.windowAttach && typeof incoming.windowAttach === 'object')
+    ? incoming.windowAttach as Record<string, unknown>
+    : {};
+
+  return {
+    ...current,
+    ...incoming,
+    windowAttach: {
+      ...currentWindowAttach,
+      ...incomingWindowAttach,
+    },
+  };
+}
+
 function isVisibleOnAnyDisplay(bounds: WindowBounds): boolean {
   const displays = screen.getAllDisplays();
   return displays.some((d) => {
@@ -105,12 +154,14 @@ function createWindow(): void {
     minHeight: 150,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     skipTaskbar: true,
     resizable: true,
     alwaysOnTop,
     icon: app.isPackaged
       ? path.join(process.resourcesPath, 'icon.ico')
       : path.join(__dirname, '../../build/icon.ico'),
+    useContentSize: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -123,8 +174,50 @@ function createWindow(): void {
     mainWindow.setAlwaysOnTop(true, 'normal');
   }
 
+  // アタッチ中リサイズは Ctrl キー押下時のみ許可
+  let isCtrlPressed = false;
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'Control') {
+      isCtrlPressed = input.type === 'keyDown';
+      return;
+    }
+    isCtrlPressed = !!input.control;
+  });
+  mainWindow.on('blur', () => {
+    isCtrlPressed = false;
+  });
+  mainWindow.on('will-resize', (event) => {
+    if (isWindowAttached() && !isCtrlPressed) {
+      event.preventDefault();
+    }
+  });
+
+  let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
+  const debounceSaveMiniHeight = (height: number) => {
+    clearTimeout(saveMiniTimer);
+    saveMiniTimer = setTimeout(() => {
+      saveMiniHeightToSettings(height);
+    }, 350);
+  };
+
+  // リサイズ時にrendererへコンテンツ高さを通知（高さ変化時のみ）
+  let lastSentH = 0;
+  mainWindow.on('resize', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const h = mainWindow.getContentSize()[1] ?? 0;
+    if (isWindowAttached()) {
+      debounceSaveMiniHeight(h);
+    }
+    if (isMiniWidthResizeSuppressed()) return;
+    if (h !== lastSentH) {
+      lastSentH = h;
+      mainWindow.webContents.send('content-resized', 0, h);
+    }
+  });
+
   // ウィンドウ位置・サイズ変更時に保存（デバウンス付き）
   const debounceSaveBounds = () => {
+    if (isWindowAttached()) return;
     if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
     saveBoundsTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
@@ -138,7 +231,11 @@ function createWindow(): void {
   // 閉じるボタンではトレイに最小化（終了しない）
   mainWindow.on('close', (e) => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-      saveWindowBounds(mainWindow.getBounds());
+      if (isWindowAttached()) {
+        saveMiniHeightToSettings(mainWindow.getContentSize()[1] ?? 0);
+      } else {
+        saveWindowBounds(mainWindow.getBounds());
+      }
     }
     if (!isQuitting) {
       e.preventDefault();
@@ -160,9 +257,10 @@ function createWindow(): void {
 function setupIPC(): void {
   ipcMain.handle('get-settings', () => loadSettings());
   ipcMain.handle('save-settings', (_event, settings: Record<string, unknown>) => {
-    saveSettings(settings);
+    const merged = mergeSettings(loadSettings(), settings);
+    saveSettings(merged);
     // Windows起動時の自動起動を設定
-    app.setLoginItemSettings({ openAtLogin: !!settings.launchAtLogin });
+    app.setLoginItemSettings({ openAtLogin: !!merged.launchAtLogin });
   });
   ipcMain.handle('get-usage-snapshot', (_event, provider: string) => {
     const filename = provider === 'claude' ? 'usage_snapshot_claude.json' : 'usage_snapshot.json';
@@ -275,11 +373,41 @@ function setupIPC(): void {
     if (!mainWindow || typeof opacity !== 'number') return;
     mainWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
   });
+  ipcMain.on('set-mini-width', (_event, width: number) => {
+    setMiniWidth(width);
+  });
   ipcMain.on('save-window-bounds', () => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
       saveWindowBounds(mainWindow.getBounds());
     }
   });
+
+  // Window Attach IPC
+  ipcMain.handle('select-executable', async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      title: 'Select target application',
+      filters: [{ name: 'Executable', extensions: ['exe'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0]!;
+    const base = filePath.replace(/\\/g, '/').split('/').pop() || '';
+    const processName = base.replace(/\.exe$/i, '').toLowerCase();
+    return { processName, path: filePath };
+  });
+  ipcMain.handle('set-attach-target', (_event, processName: string, anchor: string) => {
+    setTargetProcess(processName, anchor as any);
+  });
+  ipcMain.handle('clear-attach-target', () => clearTargetProcess());
+  ipcMain.handle('detach-window', () => detachWindow());
+  ipcMain.handle('set-attach-anchor', (_event, anchor: string) => {
+    setAnchor(anchor as any);
+  });
+  ipcMain.handle('reattach-window', () => reattachWindow());
+  ipcMain.handle('set-attach-offset', (_event, ox: number, oy: number) => setUserOffset(ox, oy));
+  ipcMain.handle('get-attach-offset', () => getUserOffset());
+  ipcMain.handle('get-attach-state', () => getAttachState());
 }
 
 app.whenReady().then(() => {
@@ -288,6 +416,16 @@ app.whenReady().then(() => {
   log('Takt started. Log file:', getLogPath());
   setupIPC();
   createWindow();
+  initWindowAttach(mainWindow!);
+  // 設定からウィンドウアタッチを復元
+  const savedSettings = loadSettings() as any;
+  const wa = savedSettings?.windowAttach;
+  if (wa?.enabled && wa?.targetProcessName) {
+    if (typeof wa.offsetX === 'number' || typeof wa.offsetY === 'number') {
+      setUserOffset(wa.offsetX || 0, wa.offsetY || 0);
+    }
+    startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight);
+  }
   createTray(mainWindow!);
   startScheduler(mainWindow!);
 });
@@ -299,6 +437,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (mainWindow && !mainWindow.isDestroyed() && isWindowAttached()) {
+    saveMiniHeightToSettings(mainWindow.getContentSize()[1] ?? 0);
+  }
+  cleanupWindowAttach();
   stopScheduler();
 });
 

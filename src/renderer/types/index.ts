@@ -1,6 +1,24 @@
 // Usage Provider
 export type UsageProvider = 'claude' | 'codex';
 
+// Window Attach Anchor Position
+export type AnchorPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+// Attach Target (window to attach to)
+export interface AttachTarget {
+  processId: number;
+  title: string;
+  path: string;
+}
+
+// Attach State
+export interface AttachState {
+  attached: boolean;
+  target: AttachTarget | null;
+  anchor: AnchorPosition;
+  targetProcessName: string;
+}
+
 // Usage Window Kind
 export type UsageWindowKind = 'primary' | 'secondary';
 
@@ -125,6 +143,15 @@ export interface Settings {
   transparentWhenInactive: boolean;
   backgroundOpacity: number; // 0-100
   launchAtLogin: boolean;
+  windowAttach: {
+    enabled: boolean;
+    targetProcessName: string; // e.g. "wezterm-gui"
+    targetPath: string; // e.g. "C:\Program Files\WezTerm\wezterm-gui.exe"
+    anchor: AnchorPosition;
+    offsetX: number;
+    offsetY: number;
+    miniHeight?: number;
+  };
 }
 
 export interface StatusThresholds {
@@ -145,7 +172,16 @@ export type IpcChannel =
   | 'app-quit'
   | 'refresh-now'
   | 'open-external'
-  | 'set-window-opacity';
+  | 'set-window-opacity'
+  | 'select-executable'
+  | 'set-attach-target'
+  | 'clear-attach-target'
+  | 'detach-window'
+  | 'reattach-window'
+  | 'set-attach-anchor'
+  | 'get-attach-state'
+  | 'attach-state-changed'
+  | 'open-attach-settings';
 
 // Electron API exposed to renderer
 export interface ElectronAPI {
@@ -162,11 +198,24 @@ export interface ElectronAPI {
   refreshNow: () => void;
   openExternal: (url: string) => void;
   setWindowOpacity: (opacity: number) => void;
+  setMiniWidth: (width: number) => void;
   saveWindowBounds: () => void;
   onUsageUpdated: (callback: (snapshot: UsageSnapshot) => void) => () => void;
   onTokenUsageUpdated: (callback: (snapshot: TokenUsageSnapshot) => void) => () => void;
   onAlwaysOnTopChanged: (callback: (value: boolean) => void) => () => void;
   onTriggerRefresh: (callback: () => void) => () => void;
+  selectExecutable: () => Promise<{ processName: string; path: string } | null>;
+  setAttachTarget: (processName: string, anchor: AnchorPosition) => Promise<void>;
+  clearAttachTarget: () => Promise<void>;
+  detachWindow: () => Promise<void>;
+  reattachWindow: () => Promise<void>;
+  setAttachAnchor: (anchor: AnchorPosition) => Promise<void>;
+  setAttachOffset: (ox: number, oy: number) => Promise<void>;
+  getAttachOffset: () => Promise<{ x: number; y: number }>;
+  getAttachState: () => Promise<AttachState>;
+  onAttachStateChanged: (callback: (state: AttachState) => void) => () => void;
+  onOpenAttachSettings: (callback: () => void) => () => void;
+  onContentResized: (callback: (width: number, height: number) => void) => () => void;
 }
 
 declare global {

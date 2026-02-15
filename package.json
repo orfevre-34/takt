@@ -55,6 +55,8 @@
     }
   },
   "dependencies": {
+    "koffi": "^2.15.1",
+    "node-window-manager": "^2.2.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.5"
@@ -74,5 +76,10 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "wait-on": "^8.0.3"
-  }
+  },
+  "trustedDependencies": [
+    "extract-file-icon",
+    "koffi",
+    "node-window-manager"
+  ]
 }

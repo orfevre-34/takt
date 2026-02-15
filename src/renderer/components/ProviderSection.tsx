@@ -30,6 +30,10 @@ interface ProviderSectionProps {
   backgroundOpacity?: number; // 0-100
   onLogin?: () => void;
   className?: string;
+  thresholds?: {
+    primary: { warningPercent: number; dangerPercent: number };
+    secondary: { warningPercent: number; dangerPercent: number };
+  };
 }
 
 const PROVIDER_NAMES: Record<UsageProvider, string> = {
@@ -59,6 +63,7 @@ export function ProviderSection({
   backgroundOpacity = 80,
   onLogin,
   className,
+  thresholds,
 }: ProviderSectionProps) {
   const windows: Array<{ window: UsageWindow | null; kind: 'primary' | 'secondary' }> = [
     { window: primaryWindow, kind: 'primary' },
@@ -135,6 +140,8 @@ export function ProviderSection({
                     displayMode={displayMode}
                     resetAt={w.resetAt}
                     limitWindowSeconds={w.limitWindowSeconds}
+                    warningThreshold={thresholds?.[kind]?.warningPercent}
+                    dangerThreshold={thresholds?.[kind]?.dangerPercent}
                   />
                 ) : (
                   <UsageDonut

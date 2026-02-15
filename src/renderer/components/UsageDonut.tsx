@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { DisplayMode } from '../types';
+import { calcProjectedPercent, getPaceBadgeClasses } from '../utils/pace';
 
 interface UsageDonutProps {
   usedPercent: number;
@@ -13,6 +14,8 @@ interface UsageDonutProps {
   resetAt?: string | null;
   /** Total window duration in seconds (e.g. 18000 for 5h) */
   limitWindowSeconds?: number;
+  warningThreshold?: number;
+  dangerThreshold?: number;
 }
 
 /** Calculate elapsed-time percentage for the inner ring. */
@@ -21,7 +24,9 @@ function calcTimePercent(
   limitWindowSeconds: number | undefined,
 ): number | null {
   if (!resetAt || !limitWindowSeconds || limitWindowSeconds <= 0) return null;
-  const remainingSec = (new Date(resetAt).getTime() - Date.now()) / 1000;
+  const dateMs = new Date(resetAt).getTime();
+  if (!Number.isFinite(dateMs)) return null;
+  const remainingSec = (dateMs - Date.now()) / 1000;
   const elapsedSec = limitWindowSeconds - remainingSec;
   return Math.max(0, Math.min(100, (elapsedSec / limitWindowSeconds) * 100));
 }
@@ -44,6 +49,8 @@ export function UsageDonut({
   displayMode = 'used',
   resetAt,
   limitWindowSeconds,
+  warningThreshold = 70,
+  dangerThreshold = 90,
 }: UsageDonutProps) {
   // Outer ring — usage
   const outerRadius = (size - strokeWidth) / 2;
@@ -83,14 +90,32 @@ export function UsageDonut({
   const timeLabel =
     resetAt && limitWindowSeconds
       ? (() => {
-          const remainSec = Math.max(
-            0,
-            (new Date(resetAt).getTime() - Date.now()) / 1000,
-          );
+          const ms = new Date(resetAt).getTime();
+          if (!Number.isFinite(ms)) return null;
+          const remainSec = Math.max(0, (ms - Date.now()) / 1000);
           const elapsedSec = limitWindowSeconds - remainSec;
           return formatDuration(displayMode === 'remaining' ? remainSec : elapsedSec);
         })()
       : null;
+
+  // Pace projection
+  const rawProjected = timePercent !== null ? calcProjectedPercent(usedPercent, timePercent) : null;
+  const showPace = rawProjected !== null;
+  const projectedDisplay = showPace
+    ? displayMode === 'remaining' ? Math.max(0, 100 - rawProjected!) : rawProjected!
+    : null;
+
+  // Pace marker on outer ring
+  const markerR = strokeWidth * 0.5;
+  const markerOverflow = showPace && rawProjected! > 100;
+  const markerAngle = showPace
+    ? (() => {
+        const pct = markerOverflow ? 100 : (displayMode === 'remaining' ? Math.max(0, 100 - rawProjected!) : rawProjected!);
+        return (Math.max(0, Math.min(100, pct)) / 100) * 2 * Math.PI;
+      })()
+    : 0;
+  const markerCx = showPace ? size / 2 + outerRadius * Math.cos(markerAngle) : 0;
+  const markerCy = showPace ? size / 2 + outerRadius * Math.sin(markerAngle) : 0;
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -145,6 +170,17 @@ export function UsageDonut({
           </>
         )}
 
+        {/* Pace marker */}
+        {showPace && (
+          <circle
+            cx={markerCx}
+            cy={markerCy}
+            r={markerR}
+            fill={markerOverflow ? '#ef4444' : 'rgba(255,255,255,0.7)'}
+            className={markerOverflow ? 'animate-pulse' : ''}
+          />
+        )}
+
         {/* Center text — usage % */}
         <text
           x={size / 2}
@@ -176,6 +212,11 @@ export function UsageDonut({
       </svg>
       {label && <span className="text-xs text-zinc-400">{label}</span>}
       {sublabel && <span className="text-[10px] text-zinc-500">{sublabel}</span>}
+      {showPace && projectedDisplay !== null && (
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${getPaceBadgeClasses(rawProjected!, warningThreshold, dangerThreshold)}`}>
+          →{Math.round(projectedDisplay)}%
+        </span>
+      )}
     </div>
   );
 }

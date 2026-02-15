@@ -111,14 +111,21 @@ function saveWindowBounds(bounds: WindowBounds): void {
   fs.writeFileSync(filePath, JSON.stringify(bounds), 'utf-8');
 }
 
+const MINI_SAVE_MAX_WIDTH = 2000;
+const MINI_SAVE_MAX_HEIGHT = 150;
+
 function saveMiniSizeToSettings(width: number, height: number): void {
   const current = loadSettings();
   const currentWindowAttach = (current.windowAttach && typeof current.windowAttach === 'object')
     ? current.windowAttach as Record<string, unknown>
     : {};
   const patch: Record<string, unknown> = {};
-  if (Number.isFinite(height) && height > 0) patch.miniHeight = Math.ceil(height);
-  if (Number.isFinite(width) && width > 0) patch.miniWidth = Math.ceil(width);
+  if (Number.isFinite(height) && height > 0 && height <= MINI_SAVE_MAX_HEIGHT) {
+    patch.miniHeight = Math.ceil(height);
+  }
+  if (Number.isFinite(width) && width > 0 && width <= MINI_SAVE_MAX_WIDTH) {
+    patch.miniWidth = Math.ceil(width);
+  }
   if (Object.keys(patch).length === 0) return;
   saveSettings({
     ...current,
@@ -227,6 +234,7 @@ function createWindow(): void {
     clearTimeout(saveMiniTimer);
     saveMiniTimer = setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (!isWindowAttached()) return;
       const cs = mainWindow.getContentSize();
       saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
     }, 350);

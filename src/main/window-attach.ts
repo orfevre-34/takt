@@ -396,6 +396,10 @@ function doDetach(notify: boolean): void {
   }
   if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
 
+  isAttached = false;
+  targetHwnd = null;
+  targetInfo = null;
+
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
     mainWindowRef.setMinimumSize(previousMinSize[0], previousMinSize[1]);
     mainWindowRef.setMaximumSize(previousMaxSize[0], previousMaxSize[1]);
@@ -411,10 +415,6 @@ function doDetach(notify: boolean): void {
       wasHiddenByMinimize = false;
     }
   }
-
-  targetHwnd = null;
-  targetInfo = null;
-  isAttached = false;
 
   if (notify) notifyStateChanged();
 }

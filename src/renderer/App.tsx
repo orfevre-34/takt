@@ -239,6 +239,7 @@ export function App() {
             backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => window.electronAPI?.openLogin?.('claude')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
+            thresholds={settings.thresholds.claude}
           />
         )}
 
@@ -276,6 +277,7 @@ export function App() {
             backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => window.electronAPI?.openLogin?.('codex')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
+            thresholds={settings.thresholds.codex}
           />
         )}
 

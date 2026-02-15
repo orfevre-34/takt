@@ -81,7 +81,7 @@ let repositionTimer: ReturnType<typeof setTimeout> | null = null;
 let reattachTimer: ReturnType<typeof setTimeout> | null = null;
 let foregroundLostCount = 0;
 let foregroundWatchTimer: ReturnType<typeof setInterval> | null = null;
-let savedForReattach: { hwnd: number; processId: number; procName: string; anchor: AnchorPosition } | null = null;
+let savedForReattach: { procName: string; anchor: AnchorPosition } | null = null;
 
 const ALLOWED_RESIZE_EDGES: Record<AnchorPosition, Set<string>> = {
   'top-left': new Set(['bottom', 'right', 'bottom-right']),
@@ -167,8 +167,6 @@ export function detach(): void {
   }
 
   const reattachInfo = {
-    hwnd: targetHwnd,
-    processId: targetInfo.processId,
     procName: configuredTargetProcessName,
     anchor: currentAnchor,
   };
@@ -345,6 +343,7 @@ function scheduleReposition(): void {
 function findTargetHwnd(): { hwnd: number; info: WindowInfo } | null {
   try {
     const windows: WindowInfo[] = windowManager.getWindows();
+    const fgHwnd = getForegroundWindow();
     let best: { hwnd: number; info: WindowInfo; area: number } | null = null;
 
     for (const win of windows) {
@@ -354,6 +353,9 @@ function findTargetHwnd(): { hwnd: number; info: WindowInfo } | null {
         if (isMinimized(win.id)) continue;
         const bounds = getAccurateWindowBounds(win.id);
         if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
+
+        if (win.id === fgHwnd) return { hwnd: win.id, info: win };
+
         const area = bounds.width * bounds.height;
         if (!best || area > best.area) {
           best = { hwnd: win.id, info: win, area };
@@ -442,7 +444,22 @@ function doAttach(hwnd: number, processId: number, title: string, path: string):
     const fgPid = getWindowProcessId(fgHwnd);
     const targetPid = targetInfo?.processId ?? 0;
 
-    if (fgPid === targetPid || fgPid === process.pid) {
+    if (fgHwnd === targetHwnd || fgPid === process.pid) {
+      foregroundLostCount = 0;
+      return;
+    }
+
+    const fgMatch = findHwndByProcessName(configuredTargetProcessName);
+    if (fgMatch) {
+      if (fgMatch.hwnd !== targetHwnd) {
+        switchAttachTarget(fgMatch.hwnd, fgMatch.processId, fgMatch.title, fgMatch.path);
+      } else {
+        foregroundLostCount = 0;
+      }
+      return;
+    }
+
+    if (fgPid === targetPid) {
       foregroundLostCount = 0;
       return;
     }
@@ -484,8 +501,6 @@ function handleForegroundLost(): void {
   }
 
   savedForReattach = {
-    hwnd: targetHwnd,
-    processId: targetInfo.processId,
     procName: configuredTargetProcessName,
     anchor: currentAnchor,
   };
@@ -505,36 +520,85 @@ function startForegroundWatch(): void {
       return;
     }
 
-    const { hwnd, processId, procName, anchor } = savedForReattach;
+    const { procName, anchor } = savedForReattach;
 
-    if (!isValidWindow(hwnd)) {
-      log('foregroundWatch: saved hwnd invalid, falling back to full scan');
-      savedForReattach = null;
+    const fgMatch = findHwndByProcessName(procName);
+    if (fgMatch) {
+      log('foregroundWatch: target process regained foreground, reattaching hwnd:', fgMatch.hwnd);
       if (foregroundWatchTimer) { clearInterval(foregroundWatchTimer); foregroundWatchTimer = null; }
-      startAutoAttach(procName, anchor);
+      savedForReattach = null;
+      doAttach(fgMatch.hwnd, fgMatch.processId, fgMatch.title, fgMatch.path);
       return;
     }
 
-    const fgHwnd = getForegroundWindow();
-    if (!fgHwnd) return;
-    const fgPid = getWindowProcessId(fgHwnd);
-
-    if (fgPid === processId) {
-      log('foregroundWatch: target regained foreground, reattaching');
-      if (foregroundWatchTimer) { clearInterval(foregroundWatchTimer); foregroundWatchTimer = null; }
-      const saved = savedForReattach;
+    if (!findTargetHwnd()) {
+      log('foregroundWatch: no target windows found, falling back to full scan');
       savedForReattach = null;
-
-      let title: string;
-      try {
-        const windows: WindowInfo[] = windowManager.getWindows();
-        const win = windows.find((w: WindowInfo) => w.id === saved.hwnd);
-        title = win?.getTitle() || saved.procName;
-      } catch { title = saved.procName; }
-
-      doAttach(saved.hwnd, saved.processId, title, '');
+      if (foregroundWatchTimer) { clearInterval(foregroundWatchTimer); foregroundWatchTimer = null; }
+      startAutoAttach(procName, anchor);
     }
   }, FG_WATCH_INTERVAL_MS);
+}
+
+function findHwndByProcessName(processName: string): { hwnd: number; processId: number; title: string; path: string } | null {
+  try {
+    const windows: WindowInfo[] = windowManager.getWindows();
+    const fgHwnd = getForegroundWindow();
+    for (const win of windows) {
+      try {
+        if (win.id !== fgHwnd) continue;
+        if (getProcessName(win.path) !== processName) continue;
+        if (!isAppWindow(win.id)) continue;
+        if (isMinimized(win.id)) continue;
+        const bounds = getAccurateWindowBounds(win.id);
+        if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
+        let title: string;
+        try { title = win.getTitle() || processName; } catch { title = processName; }
+        return { hwnd: win.id, processId: win.processId, title, path: win.path || '' };
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function switchAttachTarget(newHwnd: number, newProcessId: number, newTitle: string, newPath: string): void {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+  if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
+
+  targetHwnd = newHwnd;
+  targetInfo = { processId: newProcessId, title: newTitle, path: newPath };
+  foregroundLostCount = 0;
+
+  const bounds = getAccurateWindowBounds(newHwnd);
+  if (bounds) updatePosition(bounds);
+
+  unwatchPosition = watchWindowPosition(
+    newHwnd,
+    (b) => updatePosition(b),
+    () => {
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        const cs = mainWindowRef.getContentSize();
+        if (cs[0] && cs[0] > 0) savedMiniWidth = cs[0];
+        if (cs[1] && cs[1] > 0) savedMiniHeight = cs[1];
+      }
+      process.nextTick(() => {
+        const procName = configuredTargetProcessName;
+        const anchor = currentAnchor;
+        doDetach(true);
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.show();
+        }
+        reattachTimer = setTimeout(() => {
+          reattachTimer = null;
+          startAutoAttach(procName, anchor);
+        }, 500);
+      });
+    },
+    () => {},
+  );
+
+  log('switched attach target to', newTitle, 'hwnd:', newHwnd);
+  notifyStateChanged();
 }
 
 function doDetach(notify: boolean): void {

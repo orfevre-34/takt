@@ -12,12 +12,24 @@ function getIconPath(filename: string): string {
   return path.join(__dirname, '../../build', filename);
 }
 
+function isWindowAlive(win: BrowserWindow): boolean {
+  return !win.isDestroyed() && !win.webContents.isDestroyed();
+}
+
+function showAndSend(win: BrowserWindow, channel: string, ...args: unknown[]): void {
+  if (!isWindowAlive(win)) return;
+  win.show();
+  win.focus();
+  win.webContents.send(channel, ...args);
+}
+
 function buildContextMenu(): Menu {
   const mainWindow = mainWindowRef!;
   return Menu.buildFromTemplate([
     {
       label: 'Show/Hide',
       click: () => {
+        if (!isWindowAlive(mainWindow)) return;
         if (mainWindow.isVisible()) {
           mainWindow.hide();
         } else {
@@ -30,6 +42,7 @@ function buildContextMenu(): Menu {
     {
       label: 'Refresh Now',
       click: () => {
+        if (!isWindowAlive(mainWindow)) return;
         mainWindow.webContents.send('trigger-refresh');
       },
     },
@@ -37,10 +50,10 @@ function buildContextMenu(): Menu {
     {
       label: 'Always on Top',
       type: 'checkbox',
-      checked: mainWindow.isAlwaysOnTop(),
+      checked: isWindowAlive(mainWindow) && mainWindow.isAlwaysOnTop(),
       click: (menuItem) => {
+        if (!isWindowAlive(mainWindow)) return;
         mainWindow.setAlwaysOnTop(menuItem.checked, 'normal');
-        // レンダラーに通知して設定を同期
         mainWindow.webContents.send('always-on-top-changed', menuItem.checked);
       },
     },
@@ -55,13 +68,14 @@ function buildContextMenu(): Menu {
       }
       return {
         label: 'Attach to Window...',
-        click: () => {
-          mainWindow.show();
-          mainWindow.focus();
-          mainWindow.webContents.send('open-attach-settings');
-        },
+        click: () => showAndSend(mainWindow, 'open-settings'),
       };
     })(),
+    { type: 'separator' },
+    {
+      label: 'Settings',
+      click: () => showAndSend(mainWindow, 'open-settings'),
+    },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -82,6 +96,7 @@ export function createTray(mainWindow: BrowserWindow): void {
 
   tray.setContextMenu(buildContextMenu());
   tray.on('click', () => {
+    if (!isWindowAlive(mainWindow)) return;
     if (mainWindow.isVisible()) {
       mainWindow.hide();
     } else {
@@ -93,7 +108,7 @@ export function createTray(mainWindow: BrowserWindow): void {
 
 /** UIから設定変更時にトレイメニューを再構築 */
 export function rebuildTrayMenu(): void {
-  if (tray && mainWindowRef) {
+  if (tray && mainWindowRef && isWindowAlive(mainWindowRef)) {
     tray.setContextMenu(buildContextMenu());
   }
 }

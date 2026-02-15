@@ -33,7 +33,7 @@ export function App() {
 
   // トレイメニューから設定を開く
   useEffect(() => {
-    const cleanup = window.electronAPI?.onOpenAttachSettings?.(() => {
+    const cleanup = window.electronAPI?.onOpenSettings?.(() => {
       setSettingsOpen(true);
     });
     return cleanup;

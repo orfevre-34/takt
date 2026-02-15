@@ -156,8 +156,8 @@ export type IpcChannel =
   | 'always-on-top-changed'
   | 'trigger-refresh'
   | 'attach-state-changed'
-  | 'open-attach-settings'
-  | 'set-attach-responsiveness';
+  | 'set-attach-responsiveness'
+  | 'open-settings';
 
 // Usage fetch result (success returns snapshot fields, failure returns ok+error)
 export type UsageFetchResult =
@@ -212,7 +212,7 @@ export interface ElectronAPI {
   resetAttachLayout: () => Promise<void>;
   onAttachStateChanged: (callback: (state: AttachState) => void) => () => void;
   setAttachResponsiveness: (preset: AttachResponsiveness) => Promise<void>;
-  onOpenAttachSettings: (callback: () => void) => () => void;
+  onOpenSettings: (callback: () => void) => () => void;
   onContentResized: (callback: (width: number, height: number) => void) => () => void;
 }
 

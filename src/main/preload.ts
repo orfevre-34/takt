@@ -55,10 +55,10 @@ const api: ElectronAPI = {
     ipcRenderer.on('attach-state-changed', handler);
     return () => ipcRenderer.removeListener('attach-state-changed', handler);
   },
-  onOpenAttachSettings: (callback) => {
+  onOpenSettings: (callback) => {
     const handler = () => callback();
-    ipcRenderer.on('open-attach-settings', handler);
-    return () => ipcRenderer.removeListener('open-attach-settings', handler);
+    ipcRenderer.on('open-settings', handler);
+    return () => ipcRenderer.removeListener('open-settings', handler);
   },
   onContentResized: (callback) => {
     const handler = (_event: unknown, w: number, h: number) => callback(w, h);

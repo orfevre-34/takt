@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { log } from './logger';
-import { getAccurateWindowBounds, isValidWindow, isAppWindow, watchWindowPosition, type WindowBounds } from './win32';
+import { getAccurateWindowBounds, isValidWindow, isAppWindow, isMinimized, watchWindowPosition, type WindowBounds } from './win32';
 
 const { windowManager } = require('node-window-manager');
 
@@ -279,6 +279,7 @@ function findTargetHwnd(): { hwnd: number; info: WindowInfo } | null {
       try {
         if (getProcessName(win.path) !== configuredTargetProcessName) continue;
         if (!isAppWindow(win.id)) continue;
+        if (isMinimized(win.id)) continue;
         const bounds = getAccurateWindowBounds(win.id);
         if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
         const area = bounds.width * bounds.height;
@@ -345,17 +346,25 @@ function tryAutoAttach(): void {
     hwnd,
     (b) => updatePosition(b),
     () => {
-      if (mainWindowRef && !mainWindowRef.isDestroyed() && mainWindowRef.isVisible()) {
-        mainWindowRef.hide();
-        wasHiddenByMinimize = true;
+      // ターゲット最小化 → 通常ウィンドウに戻してスキャン再開
+      // コールバック内から unwatchPosition を直接呼ぶと koffi が不安定になるため nextTick で遅延
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        const cs = mainWindowRef.getContentSize();
+        if (cs[0] && cs[0] > 0) savedMiniWidth = cs[0];
+        if (cs[1] && cs[1] > 0) savedMiniHeight = cs[1];
       }
+      process.nextTick(() => {
+        const procName = configuredTargetProcessName;
+        const anchor = currentAnchor;
+        doDetach(true);
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.show();
+        }
+        // 最小化アニメーション完了を待ってからスキャン開始
+        setTimeout(() => startAutoAttach(procName, anchor), 500);
+      });
     },
-    () => {
-      if (mainWindowRef && !mainWindowRef.isDestroyed() && wasHiddenByMinimize) {
-        mainWindowRef.show();
-        wasHiddenByMinimize = false;
-      }
-    },
+    () => {},
   );
 
   aliveCheckTimer = setInterval(() => {

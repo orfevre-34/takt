@@ -12,7 +12,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
     onSave({ ...settings, [key]: value });
   };
 
-  // Window Attach state
   const windowAttach = settings.windowAttach ?? {
     enabled: false,
     targetProcessName: '',
@@ -49,7 +48,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </button>
         </div>
 
-        {/* Providers */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Providers
@@ -116,7 +114,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           )}
         </section>
 
-        {/* Display */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Display
@@ -199,7 +196,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </label>
         </section>
 
-        {/* Refresh */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Refresh Interval
@@ -219,7 +215,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </div>
         </section>
 
-        {/* ccusage */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             ccusage (Token Usage)
@@ -254,7 +249,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </label>
         </section>
 
-        {/* CLI Paths */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             CLI Paths
@@ -274,13 +268,11 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           ))}
         </section>
 
-        {/* Window Attach */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Window Attach
           </h3>
 
-          {/* Target executable */}
           <div className="space-y-2">
             <label className="text-[10px] text-zinc-500 block">Target Application</label>
             <div className="flex gap-1 items-center">
@@ -305,7 +297,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               </button>
             </div>
 
-            {/* Status */}
             {windowAttach.enabled && windowAttach.targetProcessName && (
               <div className="flex items-center gap-2 text-xs">
                 <span className={`inline-block w-2 h-2 rounded-full ${attachState.attached ? 'bg-green-500' : 'bg-zinc-600'}`} />
@@ -317,7 +308,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               </div>
             )}
 
-            {/* Re-attach / Disable */}
             {windowAttach.enabled && windowAttach.targetProcessName && !attachState.attached && (
               <button
                 onClick={() => window.electronAPI?.reattachWindow?.()}
@@ -350,7 +340,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
             )}
           </div>
 
-          {/* Anchor Position */}
           <div className="mt-3">
             <label className="text-[10px] text-zinc-500 mb-1 block">Anchor Position</label>
             <div className="grid grid-cols-2 gap-1">

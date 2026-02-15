@@ -13,6 +13,17 @@ interface WindowInfo {
 
 export type AnchorPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+const VALID_ANCHORS: ReadonlySet<string> = new Set(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+
+function isValidAnchor(value: unknown): value is AnchorPosition {
+  return typeof value === 'string' && VALID_ANCHORS.has(value);
+}
+
+function sanitizeFiniteNumber(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return value;
+}
+
 export interface AttachTarget {
   processId: number;
   title: string;
@@ -33,10 +44,10 @@ const MARGIN_X = 12;
 const MARGIN_TOP = 40;
 const MARGIN_BOTTOM = 16;
 const SCAN_INTERVAL_MS = 2000;
-// ウィンドウ存在チェック用（イベント駆動では検知できない消失を補完）
 const ALIVE_CHECK_INTERVAL_MS = 1000;
 
 let mainWindowRef: BrowserWindow | null = null;
+let onStateChangedCallback: (() => void) | null = null;
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let aliveCheckTimer: ReturnType<typeof setInterval> | null = null;
 let unwatchPosition: (() => void) | null = null;
@@ -57,8 +68,8 @@ let miniWidthResizeSuppressUntil = 0;
 let userResizing = false;
 let pendingMiniWidth: number | null = null;
 let repositionTimer: ReturnType<typeof setTimeout> | null = null;
+let reattachTimer: ReturnType<typeof setTimeout> | null = null;
 
-// アンカー側を固定するため、反対側エッジからのリサイズのみ許可
 const ALLOWED_RESIZE_EDGES: Record<AnchorPosition, Set<string>> = {
   'top-left': new Set(['bottom', 'right', 'bottom-right']),
   'top-right': new Set(['bottom', 'left', 'bottom-left']),
@@ -72,16 +83,18 @@ function getProcessName(exePath: string): string {
   return base.replace(/\.exe$/i, '').toLowerCase();
 }
 
-export function initWindowAttach(mainWindow: BrowserWindow): void {
+export function initWindowAttach(mainWindow: BrowserWindow, onStateChanged?: () => void): void {
   mainWindowRef = mainWindow;
+  onStateChangedCallback = onStateChanged ?? null;
 }
 
 let savedMiniHeight = 0;
 let savedMiniWidth = 0;
 
 export function startAutoAttach(targetProcessName: string, anchor: AnchorPosition, miniHeight?: number, miniWidth?: number): void {
+  if (typeof targetProcessName !== 'string') return;
   configuredTargetProcessName = targetProcessName.toLowerCase();
-  currentAnchor = anchor;
+  currentAnchor = isValidAnchor(anchor) ? anchor : 'top-right';
   if (miniHeight && miniHeight > 0) savedMiniHeight = miniHeight;
   if (miniWidth && miniWidth > 0) savedMiniWidth = miniWidth;
   stopAll();
@@ -94,8 +107,9 @@ export function startAutoAttach(targetProcessName: string, anchor: AnchorPositio
 }
 
 export function setTargetProcess(processName: string, anchor: AnchorPosition): void {
+  if (typeof processName !== 'string') return;
   if (isAttached) doDetach(false);
-  startAutoAttach(processName, anchor);
+  startAutoAttach(processName, isValidAnchor(anchor) ? anchor : 'top-right');
   notifyStateChanged();
 }
 
@@ -122,6 +136,7 @@ export function reattach(): void {
 }
 
 export function setAnchor(anchor: AnchorPosition): void {
+  if (!isValidAnchor(anchor)) return;
   currentAnchor = anchor;
   if (isAttached && targetHwnd) {
     const bounds = getAccurateWindowBounds(targetHwnd);
@@ -131,8 +146,8 @@ export function setAnchor(anchor: AnchorPosition): void {
 }
 
 export function setUserOffset(ox: number, oy: number): void {
-  userOffsetX = ox;
-  userOffsetY = oy;
+  userOffsetX = sanitizeFiniteNumber(ox, 0);
+  userOffsetY = sanitizeFiniteNumber(oy, 0);
   if (isAttached && targetHwnd) {
     const bounds = getAccurateWindowBounds(targetHwnd);
     if (bounds) updatePosition(bounds);
@@ -163,7 +178,7 @@ export function resetLayout(): void {
 
 export function setMiniWidth(width: number): void {
   if (!isAttached || !mainWindowRef || mainWindowRef.isDestroyed()) return;
-  // ユーザーリサイズ中はキューに入れて後で適用
+  if (typeof width !== 'number' || !Number.isFinite(width)) return;
   if (isUserResizing()) {
     pendingMiniWidth = width;
     return;
@@ -183,7 +198,6 @@ export function setMiniWidth(width: number): void {
 
   if (curW !== w) {
     miniWidthResizeSuppressUntil = Date.now() + 80;
-    // setBounds で位置とサイズを同時に適用（右アンカー時のちらつき防止）
     const outerSize = mainWindowRef.getSize();
     const cw = curW ?? 0;
     const ch = curH ?? MINI_DEFAULT_HEIGHT;
@@ -251,13 +265,12 @@ export function cleanupWindowAttach(): void {
   mainWindowRef = null;
 }
 
-// --- 内部 ---
-
 function stopAll(): void {
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   if (aliveCheckTimer) { clearInterval(aliveCheckTimer); aliveCheckTimer = null; }
   if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
   if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
+  if (reattachTimer) { clearTimeout(reattachTimer); reattachTimer = null; }
   userResizing = false;
   pendingMiniWidth = null;
 }
@@ -307,8 +320,6 @@ function tryAutoAttach(): void {
   let title: string;
   try { title = info.getTitle() || configuredTargetProcessName; } catch { title = configuredTargetProcessName; }
 
-  log('tryAutoAttach: found', title, 'hwnd:', hwnd, 'bounds:', JSON.stringify(bounds));
-
   previousBounds = mainWindowRef.getBounds();
   previousAlwaysOnTop = mainWindowRef.isAlwaysOnTop();
   previousMinSize = mainWindowRef.getMinimumSize() as [number, number];
@@ -321,7 +332,6 @@ function tryAutoAttach(): void {
 
   const initH = savedMiniHeight > 0 ? Math.max(MINI_MIN_HEIGHT, Math.min(MINI_MAX_HEIGHT, savedMiniHeight)) : MINI_DEFAULT_HEIGHT;
   const initW = savedMiniWidth > 0 ? Math.max(40, savedMiniWidth) : 200;
-  log('tryAutoAttach: initSize content=', initW, initH, 'saved=', savedMiniWidth, savedMiniHeight);
   mainWindowRef.setMinimumSize(100, MINI_MIN_HEIGHT);
   mainWindowRef.setMaximumSize(2000, MINI_MAX_HEIGHT);
   mainWindowRef.setContentSize(initW, initH);
@@ -329,7 +339,6 @@ function tryAutoAttach(): void {
 
   if (!mainWindowRef.isVisible()) mainWindowRef.show();
 
-  log('tryAutoAttach: after setContentSize outer=', mainWindowRef.getSize(), 'content=', mainWindowRef.getContentSize());
   updatePosition(bounds);
 
   resizeHandler = () => {
@@ -339,15 +348,12 @@ function tryAutoAttach(): void {
   };
   mainWindowRef.on('resize', resizeHandler);
 
-  // スキャン停止 → イベント駆動追従 + 存在チェックポーリング
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
 
   unwatchPosition = watchWindowPosition(
     hwnd,
     (b) => updatePosition(b),
     () => {
-      // ターゲット最小化 → 通常ウィンドウに戻してスキャン再開
-      // コールバック内から unwatchPosition を直接呼ぶと koffi が不安定になるため nextTick で遅延
       if (mainWindowRef && !mainWindowRef.isDestroyed()) {
         const cs = mainWindowRef.getContentSize();
         if (cs[0] && cs[0] > 0) savedMiniWidth = cs[0];
@@ -360,8 +366,10 @@ function tryAutoAttach(): void {
         if (mainWindowRef && !mainWindowRef.isDestroyed()) {
           mainWindowRef.show();
         }
-        // 最小化アニメーション完了を待ってからスキャン開始
-        setTimeout(() => startAutoAttach(procName, anchor), 500);
+        reattachTimer = setTimeout(() => {
+          reattachTimer = null;
+          startAutoAttach(procName, anchor);
+        }, 500);
       });
     },
     () => {},
@@ -440,7 +448,6 @@ function updatePosition(tb: WindowBounds): void {
   const sz = mainWindowRef.getSize();
   const curW = sz[0] ?? 200;
   const curH = sz[1] ?? MINI_DEFAULT_HEIGHT;
-  log('updatePosition: target=', JSON.stringify(tb), 'mySize=', curW, curH, 'offset=', userOffsetX, userOffsetY);
   const { x, y } = calcPosition(tb, curW, curH);
   mainWindowRef.setPosition(x, y);
 }
@@ -457,4 +464,5 @@ function notifyStateChanged(): void {
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
     mainWindowRef.webContents.send('attach-state-changed', getAttachState());
   }
+  onStateChangedCallback?.();
 }

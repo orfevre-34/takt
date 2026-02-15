@@ -26,6 +26,7 @@ import {
   beginUserResize,
   endUserResize,
   resetLayout,
+  type AnchorPosition,
 } from './window-attach';
 
 let mainWindow: BrowserWindow | null = null;
@@ -129,7 +130,6 @@ function mergeSettings(current: Record<string, unknown>, incoming: Record<string
     windowAttach: {
       ...currentWindowAttach,
       ...incomingWindowAttach,
-      // miniHeight/miniWidth は main プロセスが管理するため、disk の値を維持
       miniHeight: currentWindowAttach.miniHeight ?? incomingWindowAttach.miniHeight,
       miniWidth: currentWindowAttach.miniWidth ?? incomingWindowAttach.miniWidth,
     },
@@ -185,7 +185,6 @@ function createWindow(): void {
     mainWindow.setAlwaysOnTop(true, 'normal');
   }
 
-  // アタッチ中リサイズは Ctrl キー押下時のみ許可
   let isCtrlPressed = false;
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     if (input.key === 'Control') {
@@ -203,12 +202,10 @@ function createWindow(): void {
       event.preventDefault();
       return;
     }
-    // アンカーの反対側エッジからのリサイズのみ許可（OS がアンカー側を固定）
     if (!isAllowedResizeEdge((details as any).edge)) {
       event.preventDefault();
       return;
     }
-    // OS のネイティブリサイズに任せ、完了まで setMiniWidth/reposition を抑止
     beginUserResize();
   });
 
@@ -222,7 +219,6 @@ function createWindow(): void {
     }, 350);
   };
 
-  // リサイズ時にrendererへコンテンツ高さを通知（高さ変化時のみ）
   let lastSentH = 0;
   mainWindow.on('resize', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -250,7 +246,6 @@ function createWindow(): void {
   mainWindow.on('moved', debounceSaveBounds);
   mainWindow.on('resized', () => {
     debounceSaveBounds();
-    // Windows: マウスボタンを離した時に発火 → ユーザーリサイズ完了
     endUserResize();
   });
 
@@ -409,7 +404,6 @@ function setupIPC(): void {
     }
   });
 
-  // Window Attach IPC
   ipcMain.handle('select-executable', async () => {
     const { dialog } = require('electron');
     const result = await dialog.showOpenDialog({
@@ -424,12 +418,12 @@ function setupIPC(): void {
     return { processName, path: filePath };
   });
   ipcMain.handle('set-attach-target', (_event, processName: string, anchor: string) => {
-    setTargetProcess(processName, anchor as any);
+    setTargetProcess(processName, anchor as AnchorPosition);
   });
   ipcMain.handle('clear-attach-target', () => clearTargetProcess());
   ipcMain.handle('detach-window', () => detachWindow());
   ipcMain.handle('set-attach-anchor', (_event, anchor: string) => {
-    setAnchor(anchor as any);
+    setAnchor(anchor as AnchorPosition);
   });
   ipcMain.handle('reattach-window', () => reattachWindow());
   ipcMain.handle('set-attach-offset', (_event, ox: number, oy: number) => setUserOffset(ox, oy));
@@ -447,7 +441,7 @@ app.whenReady().then(() => {
   log('Takt started. Log file:', getLogPath());
   setupIPC();
   createWindow();
-  initWindowAttach(mainWindow!);
+  initWindowAttach(mainWindow!, () => rebuildTrayMenu());
   // 設定からウィンドウアタッチを復元
   const savedSettings = loadSettings() as any;
   const wa = savedSettings?.windowAttach;

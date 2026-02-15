@@ -54,7 +54,17 @@ let userOffsetX = 0;
 let userOffsetY = 0;
 let resizeHandler: (() => void) | null = null;
 let miniWidthResizeSuppressUntil = 0;
+let userResizing = false;
+let pendingMiniWidth: number | null = null;
 let repositionTimer: ReturnType<typeof setTimeout> | null = null;
+
+// アンカー側を固定するため、反対側エッジからのリサイズのみ許可
+const ALLOWED_RESIZE_EDGES: Record<AnchorPosition, Set<string>> = {
+  'top-left': new Set(['bottom', 'right', 'bottom-right']),
+  'top-right': new Set(['bottom', 'left', 'bottom-left']),
+  'bottom-left': new Set(['top', 'right', 'top-right']),
+  'bottom-right': new Set(['top', 'left', 'top-left']),
+};
 
 function getProcessName(exePath: string): string {
   if (!exePath) return '';
@@ -135,6 +145,11 @@ export function getUserOffset(): { x: number; y: number } {
 
 export function setMiniWidth(width: number): void {
   if (!isAttached || !mainWindowRef || mainWindowRef.isDestroyed()) return;
+  // ユーザーリサイズ中はキューに入れて後で適用
+  if (isUserResizing()) {
+    pendingMiniWidth = width;
+    return;
+  }
   const w = Math.max(40, Math.ceil(width));
   const [curW, curH] = mainWindowRef.getContentSize();
 
@@ -172,6 +187,27 @@ export function isMiniWidthResizeSuppressed(): boolean {
   return Date.now() < miniWidthResizeSuppressUntil;
 }
 
+export function isAllowedResizeEdge(edge: string): boolean {
+  return ALLOWED_RESIZE_EDGES[currentAnchor]?.has(edge) ?? false;
+}
+
+export function isUserResizing(): boolean {
+  return userResizing;
+}
+
+export function beginUserResize(): void {
+  userResizing = true;
+}
+
+export function endUserResize(): void {
+  userResizing = false;
+  if (pendingMiniWidth !== null) {
+    const w = pendingMiniWidth;
+    pendingMiniWidth = null;
+    setMiniWidth(w);
+  }
+}
+
 function repositionToAnchor(): void {
   if (!isAttached || !targetHwnd || !mainWindowRef || mainWindowRef.isDestroyed()) return;
   const bounds = getAccurateWindowBounds(targetHwnd);
@@ -204,6 +240,8 @@ function stopAll(): void {
   if (aliveCheckTimer) { clearInterval(aliveCheckTimer); aliveCheckTimer = null; }
   if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
   if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
+  userResizing = false;
+  pendingMiniWidth = null;
 }
 
 function scheduleReposition(): void {
@@ -277,6 +315,7 @@ function tryAutoAttach(): void {
 
   resizeHandler = () => {
     if (isMiniWidthResizeSuppressed()) return;
+    if (isUserResizing()) return;
     scheduleReposition();
   };
   mainWindowRef.on('resize', resizeHandler);

@@ -22,6 +22,9 @@ import {
   isWindowAttached,
   cleanupWindowAttach,
   computeAttachedBounds,
+  isAllowedResizeEdge,
+  beginUserResize,
+  endUserResize,
 } from './window-attach';
 
 let mainWindow: BrowserWindow | null = null;
@@ -193,18 +196,19 @@ function createWindow(): void {
   mainWindow.on('blur', () => {
     isCtrlPressed = false;
   });
-  mainWindow.on('will-resize', (event, newBounds) => {
+  mainWindow.on('will-resize', (event, _newBounds, details) => {
     if (!isWindowAttached()) return;
     if (!isCtrlPressed) {
       event.preventDefault();
       return;
     }
-    // Ctrl+リサイズ: アンカー位置を維持したまま setBounds で位置とサイズを同時適用
-    event.preventDefault();
-    const corrected = computeAttachedBounds(newBounds.width, newBounds.height);
-    if (corrected) {
-      mainWindow!.setBounds(corrected);
+    // アンカーの反対側エッジからのリサイズのみ許可（OS がアンカー側を固定）
+    if (!isAllowedResizeEdge((details as any).edge)) {
+      event.preventDefault();
+      return;
     }
+    // OS のネイティブリサイズに任せ、完了まで setMiniWidth/reposition を抑止
+    beginUserResize();
   });
 
   let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
@@ -243,7 +247,11 @@ function createWindow(): void {
     }, 500);
   };
   mainWindow.on('moved', debounceSaveBounds);
-  mainWindow.on('resized', debounceSaveBounds);
+  mainWindow.on('resized', () => {
+    debounceSaveBounds();
+    // Windows: マウスボタンを離した時に発火 → ユーザーリサイズ完了
+    endUserResize();
+  });
 
   // 閉じるボタンではトレイに最小化（終了しない）
   mainWindow.on('close', (e) => {

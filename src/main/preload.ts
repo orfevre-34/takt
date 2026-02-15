@@ -26,4 +26,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('token-usage-updated', handler);
     return () => ipcRenderer.removeListener('token-usage-updated', handler);
   },
+  onAlwaysOnTopChanged: (callback: (value: boolean) => void) => {
+    const handler = (_event: unknown, value: boolean) => callback(value);
+    ipcRenderer.on('always-on-top-changed', handler);
+    return () => ipcRenderer.removeListener('always-on-top-changed', handler);
+  },
+  onTriggerRefresh: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('trigger-refresh', handler);
+    return () => ipcRenderer.removeListener('trigger-refresh', handler);
+  },
 });

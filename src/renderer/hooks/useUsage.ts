@@ -75,7 +75,7 @@ export function useUsage() {
   // trigger-refreshイベントをリッスン
   useEffect(() => {
     const handler = () => { refresh(); };
-    const cleanup = (window.electronAPI as any)?.onTriggerRefresh?.(handler);
+    const cleanup = window.electronAPI?.onTriggerRefresh(handler);
     return cleanup;
   }, [refresh]);
 

@@ -2,6 +2,7 @@ import { Tray, Menu, nativeImage, BrowserWindow, app } from 'electron';
 import path from 'path';
 
 let tray: Tray | null = null;
+let mainWindowRef: BrowserWindow | null = null;
 
 function getIconPath(filename: string): string {
   if (app.isPackaged) {
@@ -10,13 +11,9 @@ function getIconPath(filename: string): string {
   return path.join(__dirname, '../../build', filename);
 }
 
-export function createTray(mainWindow: BrowserWindow): void {
-  const iconPath = getIconPath('icon.ico');
-  const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
-  tray.setToolTip('Takt - Usage Monitor');
-
-  const contextMenu = Menu.buildFromTemplate([
+function buildContextMenu(): Menu {
+  const mainWindow = mainWindowRef!;
+  return Menu.buildFromTemplate([
     {
       label: 'Show/Hide',
       click: () => {
@@ -42,6 +39,8 @@ export function createTray(mainWindow: BrowserWindow): void {
       checked: mainWindow.isAlwaysOnTop(),
       click: (menuItem) => {
         mainWindow.setAlwaysOnTop(menuItem.checked, 'normal');
+        // レンダラーに通知して設定を同期
+        mainWindow.webContents.send('always-on-top-changed', menuItem.checked);
       },
     },
     { type: 'separator' },
@@ -49,13 +48,20 @@ export function createTray(mainWindow: BrowserWindow): void {
       label: 'Quit',
       click: () => {
         tray?.destroy();
-        const { app } = require('electron');
         app.quit();
       },
     },
   ]);
+}
 
-  tray.setContextMenu(contextMenu);
+export function createTray(mainWindow: BrowserWindow): void {
+  mainWindowRef = mainWindow;
+  const iconPath = getIconPath('icon.ico');
+  const icon = nativeImage.createFromPath(iconPath);
+  tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
+  tray.setToolTip('Takt - Usage Monitor');
+
+  tray.setContextMenu(buildContextMenu());
   tray.on('click', () => {
     if (mainWindow.isVisible()) {
       mainWindow.hide();
@@ -64,6 +70,13 @@ export function createTray(mainWindow: BrowserWindow): void {
       mainWindow.focus();
     }
   });
+}
+
+/** UIから設定変更時にトレイメニューを再構築 */
+export function rebuildTrayMenu(): void {
+  if (tray && mainWindowRef) {
+    tray.setContextMenu(buildContextMenu());
+  }
 }
 
 function createDefaultIcon(): Buffer {
@@ -95,4 +108,5 @@ export function updateTrayTooltip(text: string): void {
 export function destroyTray(): void {
   tray?.destroy();
   tray = null;
+  mainWindowRef = null;
 }

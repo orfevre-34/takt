@@ -45,6 +45,19 @@ export function useSettings() {
       });
   }, [setSettings]);
 
+  // トレイメニューからの alwaysOnTop 変更を受け取る
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onAlwaysOnTopChanged((value: boolean) => {
+      const current = useAppStore.getState().settings;
+      if (current) {
+        const updated = { ...current, alwaysOnTop: value };
+        setSettings(updated);
+        window.electronAPI?.saveSettings(updated);
+      }
+    });
+    return cleanup;
+  }, [setSettings]);
+
   const updateSettings = async (newSettings: Settings) => {
     setSettings(newSettings);
     await window.electronAPI?.saveSettings(newSettings);

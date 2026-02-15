@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { createTray } from './tray';
+import { createTray, rebuildTrayMenu } from './tray';
 import { startScheduler, stopScheduler } from './scheduler';
 import { openLoginWindow, fetchClaudeUsage, fetchCodexUsage } from './usage-fetcher';
 import { clearLog, log, getLogPath } from './logger';
@@ -172,6 +172,7 @@ function setupIPC(): void {
   });
   ipcMain.handle('set-always-on-top', (_event, value: boolean) => {
     mainWindow?.setAlwaysOnTop(value, 'normal');
+    rebuildTrayMenu();
   });
   ipcMain.handle('run-ccusage', async (_event, provider: string) => {
     const settings = loadSettings() as any;

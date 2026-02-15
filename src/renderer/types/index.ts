@@ -164,6 +164,8 @@ export interface ElectronAPI {
   saveWindowBounds: () => void;
   onUsageUpdated: (callback: (snapshot: UsageSnapshot) => void) => () => void;
   onTokenUsageUpdated: (callback: (snapshot: TokenUsageSnapshot) => void) => () => void;
+  onAlwaysOnTopChanged: (callback: (value: boolean) => void) => () => void;
+  onTriggerRefresh: (callback: () => void) => () => void;
 }
 
 declare global {

@@ -12,8 +12,8 @@ interface MiniViewProps {
 }
 
 export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onDetach, onOffsetChange }: MiniViewProps) {
-  const showClaude = settings.providers.claude.enabled && claudeUsage?.primaryWindow;
-  const showCodex = settings.providers.codex.enabled && codexUsage?.primaryWindow;
+  const showClaude = settings.providers.claude.enabled;
+  const showCodex = settings.providers.codex.enabled;
 
   const getColor = (provider: 'claude' | 'codex', percent: number) =>
     getStatusColor(
@@ -99,8 +99,8 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
         {showClaude && (
           <MiniProviderGroup
             label="Claude"
-            pw={claudeUsage!.primaryWindow!}
-            color={getColor('claude', claudeUsage!.primaryWindow!.usedPercent)}
+            pw={claudeUsage?.primaryWindow ?? null}
+            color={claudeUsage?.primaryWindow ? getColor('claude', claudeUsage.primaryWindow.usedPercent) : '#27272a'}
             displayMode={settings.displayMode}
             donutSize={donutSize}
             labelSize={labelSize}
@@ -113,8 +113,8 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
         {showCodex && (
           <MiniProviderGroup
             label="Codex"
-            pw={codexUsage!.primaryWindow!}
-            color={getColor('codex', codexUsage!.primaryWindow!.usedPercent)}
+            pw={codexUsage?.primaryWindow ?? null}
+            color={codexUsage?.primaryWindow ? getColor('codex', codexUsage.primaryWindow.usedPercent) : '#27272a'}
             displayMode={settings.displayMode}
             donutSize={donutSize}
             labelSize={labelSize}
@@ -139,21 +139,30 @@ function MiniProviderGroup({
   gap,
 }: {
   label: string;
-  pw: UsageWindow;
+  pw: UsageWindow | null;
   color: string;
   displayMode: DisplayMode;
   donutSize: number;
   labelSize: number;
   gap: number;
 }) {
-  const usedPct = displayMode === 'remaining' ? 100 - pw.usedPercent : pw.usedPercent;
-  const timeInfo = useTimeInfo(pw.resetAt, pw.limitWindowSeconds, displayMode);
+  const usedPct = pw ? (displayMode === 'remaining' ? 100 - pw.usedPercent : pw.usedPercent) : 0;
+  const timeInfo = useTimeInfo(pw?.resetAt ?? null, pw?.limitWindowSeconds ?? 0, displayMode);
 
   return (
     <div className="flex items-center" style={{ gap }}>
       <span className="font-semibold text-zinc-500 leading-none whitespace-nowrap" style={{ fontSize: labelSize }}>{label}</span>
-      <MiniDonut size={donutSize} value={Math.round(Math.max(0, Math.min(100, usedPct)))} color={color} text={`${Math.round(usedPct)}%`} />
-      <MiniDonut size={donutSize} value={timeInfo.percent} color="#60a5fa" text={timeInfo.label} />
+      {pw ? (
+        <>
+          <MiniDonut size={donutSize} value={Math.round(Math.max(0, Math.min(100, usedPct)))} color={color} text={`${Math.round(usedPct)}%`} />
+          <MiniDonut size={donutSize} value={timeInfo.percent} color="#60a5fa" text={timeInfo.label} />
+        </>
+      ) : (
+        <>
+          <MiniDonut size={donutSize} value={0} color="#27272a" text="--" />
+          <MiniDonut size={donutSize} value={0} color="#27272a" text="--" />
+        </>
+      )}
     </div>
   );
 }

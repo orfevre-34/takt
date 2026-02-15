@@ -1,6 +1,6 @@
 {
   "name": "takt",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "description": "Desktop widget for Claude Code / Codex usage monitoring",
   "author": "tikeg",

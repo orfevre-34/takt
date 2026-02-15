@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import type { UsageSnapshot, UsageWindow, Settings, DisplayMode } from '../types';
 import { getStatusColor } from '../utils/colors';
+import { calcProjectedPercent, getPaceBadgeClasses } from '../utils/pace';
 
 interface MiniViewProps {
   claudeUsage: UsageSnapshot | null;
@@ -105,6 +106,8 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
             donutSize={donutSize}
             labelSize={labelSize}
             gap={gapPx}
+            warningThreshold={settings.thresholds.claude.primary.warningPercent}
+            dangerThreshold={settings.thresholds.claude.primary.dangerPercent}
           />
         )}
         {showClaude && showCodex && (
@@ -119,6 +122,8 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
             donutSize={donutSize}
             labelSize={labelSize}
             gap={gapPx}
+            warningThreshold={settings.thresholds.codex.primary.warningPercent}
+            dangerThreshold={settings.thresholds.codex.primary.dangerPercent}
           />
         )}
         {!showClaude && !showCodex && (
@@ -137,6 +142,8 @@ function MiniProviderGroup({
   donutSize,
   labelSize,
   gap,
+  warningThreshold = 70,
+  dangerThreshold = 90,
 }: {
   label: string;
   pw: UsageWindow | null;
@@ -145,9 +152,19 @@ function MiniProviderGroup({
   donutSize: number;
   labelSize: number;
   gap: number;
+  warningThreshold?: number;
+  dangerThreshold?: number;
 }) {
   const usedPct = pw ? (displayMode === 'remaining' ? 100 - pw.usedPercent : pw.usedPercent) : 0;
   const timeInfo = useTimeInfo(pw?.resetAt ?? null, pw?.limitWindowSeconds ?? 0, displayMode);
+
+  const rawProjected = pw && timeInfo.rawTimePercent !== null
+    ? calcProjectedPercent(pw.usedPercent, timeInfo.rawTimePercent)
+    : null;
+  const projectedDisplay = rawProjected !== null
+    ? displayMode === 'remaining' ? Math.max(0, 100 - rawProjected) : rawProjected
+    : null;
+  const badgeFontSize = Math.max(4, Math.round(donutSize * 0.2));
 
   return (
     <div className="flex items-center" style={{ gap }}>
@@ -156,6 +173,14 @@ function MiniProviderGroup({
         <>
           <MiniDonut size={donutSize} value={Math.round(Math.max(0, Math.min(100, usedPct)))} color={color} text={`${Math.round(usedPct)}%`} />
           <MiniDonut size={donutSize} value={timeInfo.percent} color="#60a5fa" text={timeInfo.label} />
+          {projectedDisplay !== null && (
+            <span
+              className={`rounded-full font-semibold whitespace-nowrap leading-none ${getPaceBadgeClasses(rawProjected!, warningThreshold, dangerThreshold)}`}
+              style={{ fontSize: badgeFontSize, padding: `${Math.max(1, badgeFontSize * 0.2)}px ${Math.max(2, badgeFontSize * 0.4)}px` }}
+            >
+              →{Math.round(projectedDisplay)}%
+            </span>
+          )}
         </>
       ) : (
         <>
@@ -203,21 +228,26 @@ function MiniDonut({ size, value, color, text }: { size: number; value: number; 
 function useTimeInfo(resetAt: string | null, limitWindowSeconds: number, displayMode: DisplayMode) {
   const calc = useCallback(() => {
     if (!resetAt || !limitWindowSeconds || limitWindowSeconds <= 0) {
-      return { percent: 0, label: '--' };
+      return { percent: 0, label: '--', rawTimePercent: null as number | null };
     }
-    const remainSec = Math.max(0, (new Date(resetAt).getTime() - Date.now()) / 1000);
+    const dateMs = new Date(resetAt).getTime();
+    if (!Number.isFinite(dateMs)) {
+      return { percent: 0, label: '--', rawTimePercent: null as number | null };
+    }
+    const remainSec = Math.max(0, (dateMs - Date.now()) / 1000);
     const elapsedSec = limitWindowSeconds - remainSec;
 
+    const rawTimePct = Math.max(0, Math.min(100, (elapsedSec / limitWindowSeconds) * 100));
     const pct = displayMode === 'remaining'
       ? (remainSec / limitWindowSeconds) * 100
-      : (elapsedSec / limitWindowSeconds) * 100;
+      : rawTimePct;
 
     const displaySec = displayMode === 'remaining' ? remainSec : elapsedSec;
     const h = Math.floor(displaySec / 3600);
     const m = Math.floor((displaySec % 3600) / 60);
     const lbl = h > 0 ? `${h}h${m}m` : `${m}m`;
 
-    return { percent: Math.max(0, Math.min(100, pct)), label: lbl };
+    return { percent: Math.max(0, Math.min(100, pct)), label: lbl, rawTimePercent: rawTimePct };
   }, [resetAt, limitWindowSeconds, displayMode]);
 
   const [info, setInfo] = useState(calc);

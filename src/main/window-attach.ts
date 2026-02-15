@@ -155,9 +155,30 @@ export function clearTargetProcess(): void {
 }
 
 export function detach(): void {
-  if (isAttached) doDetach(true);
+  if (!isAttached || !targetHwnd || !targetInfo) {
+    stopAll();
+    return;
+  }
+
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    const cs = mainWindowRef.getContentSize();
+    if (cs[0] && cs[0] > 0) savedMiniWidth = cs[0];
+    if (cs[1] && cs[1] > 0) savedMiniHeight = cs[1];
+  }
+
+  const reattachInfo = {
+    hwnd: targetHwnd,
+    processId: targetInfo.processId,
+    procName: configuredTargetProcessName,
+    anchor: currentAnchor,
+  };
+
+  doDetach(true);
   stopAll();
-  log('detach: manual detach, target config kept:', configuredTargetProcessName);
+
+  savedForReattach = reattachInfo;
+  log('detach: manual detach, watching for reattach:', configuredTargetProcessName);
+  startForegroundWatch();
 }
 
 export function reattach(): void {

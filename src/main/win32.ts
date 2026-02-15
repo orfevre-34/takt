@@ -42,6 +42,10 @@ const IsWindow_fn = user32.func(
   'bool __stdcall IsWindow(int64 hwnd)',
 );
 
+const GetForegroundWindow_fn = user32.func(
+  'int64 __stdcall GetForegroundWindow()',
+);
+
 const IsIconic_fn = user32.func(
   'bool __stdcall IsIconic(int64 hwnd)',
 );
@@ -89,6 +93,16 @@ export function getAccurateWindowBounds(hwnd: number): WindowBounds | null {
     width: rect.right - rect.left,
     height: rect.bottom - rect.top,
   };
+}
+
+export function getForegroundWindow(): number {
+  return GetForegroundWindow_fn();
+}
+
+export function getWindowProcessId(hwnd: number): number {
+  const pidOut = [0];
+  GetWindowThreadProcessId_fn(hwnd, pidOut);
+  return pidOut[0]!;
 }
 
 export function isMinimized(hwnd: number): boolean {

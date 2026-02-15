@@ -1,4 +1,4 @@
-import type { Settings, DisplayMode, LayoutOrientation, AttachState, AnchorPosition } from '../types';
+import type { Settings, DisplayMode, LayoutOrientation, AttachState, AnchorPosition, AttachResponsiveness } from '../types';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -323,6 +323,28 @@ export function SettingsPanel({ settings, attachState, onSave, onClose }: Settin
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="mt-3">
+            <label className="text-[10px] text-zinc-500 mb-1 block">Responsiveness</label>
+            <div className="flex gap-1">
+              {(['fast', 'normal', 'efficient'] as AttachResponsiveness[]).map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => {
+                    update('windowAttach', { ...windowAttach, responsiveness: preset });
+                    window.electronAPI?.setAttachResponsiveness?.(preset);
+                  }}
+                  className={`flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                    (windowAttach.responsiveness ?? 'normal') === preset
+                      ? 'bg-zinc-700 text-zinc-100'
+                      : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {preset.charAt(0).toUpperCase() + preset.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-3">

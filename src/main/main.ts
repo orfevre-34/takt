@@ -26,7 +26,9 @@ import {
   beginUserResize,
   endUserResize,
   resetLayout,
+  setResponsiveness,
   type AnchorPosition,
+  type AttachResponsiveness,
 } from './window-attach';
 
 function parseCliArgs(str: string): string[] {
@@ -459,6 +461,12 @@ function setupIPC(): void {
     resetLayout();
     saveMiniSizeToSettings(200, 40);
   });
+  ipcMain.handle('set-attach-responsiveness', (_event, preset: string) => {
+    const valid = ['fast', 'normal', 'efficient'];
+    if (valid.includes(preset)) {
+      setResponsiveness(preset as AttachResponsiveness);
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -471,6 +479,9 @@ app.whenReady().then(() => {
   // 設定からウィンドウアタッチを復元
   const savedSettings = loadSettings() as any;
   const wa = savedSettings?.windowAttach;
+  if (wa?.responsiveness) {
+    setResponsiveness(wa.responsiveness);
+  }
   if (wa?.enabled && wa?.targetProcessName) {
     if (typeof wa.offsetX === 'number' || typeof wa.offsetY === 'number') {
       setUserOffset(wa.offsetX || 0, wa.offsetY || 0);

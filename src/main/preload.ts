@@ -48,6 +48,7 @@ const api: ElectronAPI = {
   getAttachOffset: () => ipcRenderer.invoke('get-attach-offset'),
   getAttachState: () => ipcRenderer.invoke('get-attach-state'),
   resetAttachLayout: () => ipcRenderer.invoke('reset-attach-layout'),
+  setAttachResponsiveness: (preset) => ipcRenderer.invoke('set-attach-responsiveness', preset),
   onAttachStateChanged: (callback) => {
     const handler = (_event: unknown, state: unknown) => callback(state as any);
     ipcRenderer.on('attach-state-changed', handler);

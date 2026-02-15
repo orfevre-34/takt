@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS: Settings = {
     offsetX: 0,
     offsetY: 0,
     miniHeight: 48,
+    responsiveness: 'normal',
   },
 };
 

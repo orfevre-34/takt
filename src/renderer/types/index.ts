@@ -4,6 +4,9 @@ export type UsageProvider = 'claude' | 'codex';
 // Window Attach Anchor Position
 export type AnchorPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+// Attach Responsiveness Preset
+export type AttachResponsiveness = 'fast' | 'normal' | 'efficient';
+
 // Attach Target (window to attach to)
 export interface AttachTarget {
   processId: number;
@@ -109,6 +112,7 @@ export interface Settings {
     offsetX: number;
     offsetY: number;
     miniHeight?: number;
+    responsiveness?: AttachResponsiveness;
   };
 }
 
@@ -151,7 +155,8 @@ export type IpcChannel =
   | 'always-on-top-changed'
   | 'trigger-refresh'
   | 'attach-state-changed'
-  | 'open-attach-settings';
+  | 'open-attach-settings'
+  | 'set-attach-responsiveness';
 
 // Usage fetch result (success returns snapshot fields, failure returns ok+error)
 export type UsageFetchResult =
@@ -204,6 +209,7 @@ export interface ElectronAPI {
   getAttachState: () => Promise<AttachState>;
   resetAttachLayout: () => Promise<void>;
   onAttachStateChanged: (callback: (state: AttachState) => void) => () => void;
+  setAttachResponsiveness: (preset: AttachResponsiveness) => Promise<void>;
   onOpenAttachSettings: (callback: () => void) => () => void;
   onContentResized: (callback: (width: number, height: number) => void) => () => void;
 }

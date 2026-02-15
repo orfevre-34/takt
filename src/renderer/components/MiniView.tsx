@@ -6,11 +6,12 @@ interface MiniViewProps {
   claudeUsage: UsageSnapshot | null;
   codexUsage: UsageSnapshot | null;
   settings: Settings;
+  initialHeight?: number;
   onDetach: () => void;
   onOffsetChange: (ox: number, oy: number) => void;
 }
 
-export function MiniView({ claudeUsage, codexUsage, settings, onDetach, onOffsetChange }: MiniViewProps) {
+export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onDetach, onOffsetChange }: MiniViewProps) {
   const showClaude = settings.providers.claude.enabled && claudeUsage?.primaryWindow;
   const showCodex = settings.providers.codex.enabled && codexUsage?.primaryWindow;
 
@@ -61,7 +62,7 @@ export function MiniView({ claudeUsage, codexUsage, settings, onDetach, onOffset
   }, [dragging, dragStart, onOffsetChange]);
 
   // main プロセスからコンテンツ高さを受信
-  const [contentH, setContentH] = useState(48);
+  const [contentH, setContentH] = useState(initialHeight ?? 48);
   useEffect(() => {
     const cleanup = window.electronAPI?.onContentResized?.((_, h) => {
       setContentH(h);

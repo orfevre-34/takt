@@ -131,6 +131,7 @@ export function App() {
           claudeUsage={claudeUsage}
           codexUsage={codexUsage}
           settings={settings}
+          initialHeight={settings.windowAttach.miniHeight}
           onDetach={() => window.electronAPI?.detachWindow?.()}
           onOffsetChange={(ox, oy) => {
             updateSettings({ ...settings, windowAttach: { ...settings.windowAttach, offsetX: ox, offsetY: oy } });

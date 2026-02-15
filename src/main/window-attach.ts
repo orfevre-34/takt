@@ -67,11 +67,13 @@ export function initWindowAttach(mainWindow: BrowserWindow): void {
 }
 
 let savedMiniHeight = 0;
+let savedMiniWidth = 0;
 
-export function startAutoAttach(targetProcessName: string, anchor: AnchorPosition, miniHeight?: number): void {
+export function startAutoAttach(targetProcessName: string, anchor: AnchorPosition, miniHeight?: number, miniWidth?: number): void {
   configuredTargetProcessName = targetProcessName.toLowerCase();
   currentAnchor = anchor;
   if (miniHeight && miniHeight > 0) savedMiniHeight = miniHeight;
+  if (miniWidth && miniWidth > 0) savedMiniWidth = miniWidth;
   stopAll();
 
   if (!configuredTargetProcessName) return;
@@ -147,12 +149,23 @@ export function setMiniWidth(width: number): void {
   }
 
   if (curW !== w) {
-    // setContentSize による内部リサイズ通知は、renderer への高さ通知を一時抑止する
     miniWidthResizeSuppressUntil = Date.now() + 80;
-    mainWindowRef.setContentSize(w, curH ?? MINI_DEFAULT_HEIGHT);
+    // setBounds で位置とサイズを同時に適用（右アンカー時のちらつき防止）
+    const outerSize = mainWindowRef.getSize();
+    const cw = curW ?? 0;
+    const ch = curH ?? MINI_DEFAULT_HEIGHT;
+    const frameW = (outerSize[0] ?? 0) - cw;
+    const frameH = (outerSize[1] ?? 0) - ch;
+    const bounds = computeAttachedBounds(w + frameW, ch + frameH);
+    if (bounds) {
+      mainWindowRef.setBounds(bounds);
+    } else {
+      mainWindowRef.setContentSize(w, curH ?? MINI_DEFAULT_HEIGHT);
+    }
+    savedMiniWidth = w;
+  } else {
+    repositionToAnchor();
   }
-
-  repositionToAnchor();
 }
 
 export function isMiniWidthResizeSuppressed(): boolean {
@@ -250,13 +263,16 @@ function tryAutoAttach(): void {
   wasHiddenByMinimize = false;
 
   const initH = savedMiniHeight > 0 ? Math.max(MINI_MIN_HEIGHT, Math.min(MINI_MAX_HEIGHT, savedMiniHeight)) : MINI_DEFAULT_HEIGHT;
+  const initW = savedMiniWidth > 0 ? Math.max(40, savedMiniWidth) : 200;
+  log('tryAutoAttach: initSize content=', initW, initH, 'saved=', savedMiniWidth, savedMiniHeight);
   mainWindowRef.setMinimumSize(100, MINI_MIN_HEIGHT);
   mainWindowRef.setMaximumSize(2000, MINI_MAX_HEIGHT);
-  mainWindowRef.setContentSize(200, initH);
+  mainWindowRef.setContentSize(initW, initH);
   mainWindowRef.setAlwaysOnTop(true, 'screen-saver');
 
   if (!mainWindowRef.isVisible()) mainWindowRef.show();
 
+  log('tryAutoAttach: after setContentSize outer=', mainWindowRef.getSize(), 'content=', mainWindowRef.getContentSize());
   updatePosition(bounds);
 
   resizeHandler = () => {
@@ -329,13 +345,7 @@ function doDetach(notify: boolean): void {
   if (notify) notifyStateChanged();
 }
 
-function updatePosition(tb: WindowBounds): void {
-  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
-
-  const sz = mainWindowRef.getSize();
-  const curW = sz[0] ?? 200;
-  const curH = sz[1] ?? MINI_DEFAULT_HEIGHT;
-  log('updatePosition: target=', JSON.stringify(tb), 'mySize=', curW, curH, 'offset=', userOffsetX, userOffsetY);
+function calcPosition(tb: WindowBounds, outerW: number, outerH: number): { x: number; y: number } {
   let x: number, y: number;
   switch (currentAnchor) {
     case 'top-left':
@@ -343,19 +353,38 @@ function updatePosition(tb: WindowBounds): void {
       y = tb.y + MARGIN_TOP;
       break;
     case 'top-right':
-      x = tb.x + tb.width - curW - MARGIN_X;
+      x = tb.x + tb.width - outerW - MARGIN_X;
       y = tb.y + MARGIN_TOP;
       break;
     case 'bottom-left':
       x = tb.x + MARGIN_X;
-      y = tb.y + tb.height - curH - MARGIN_BOTTOM;
+      y = tb.y + tb.height - outerH - MARGIN_BOTTOM;
       break;
     case 'bottom-right':
-      x = tb.x + tb.width - curW - MARGIN_X;
-      y = tb.y + tb.height - curH - MARGIN_BOTTOM;
+      x = tb.x + tb.width - outerW - MARGIN_X;
+      y = tb.y + tb.height - outerH - MARGIN_BOTTOM;
       break;
   }
-  mainWindowRef.setPosition(Math.round(x + userOffsetX), Math.round(y + userOffsetY));
+  return { x: Math.round(x + userOffsetX), y: Math.round(y + userOffsetY) };
+}
+
+function updatePosition(tb: WindowBounds): void {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+
+  const sz = mainWindowRef.getSize();
+  const curW = sz[0] ?? 200;
+  const curH = sz[1] ?? MINI_DEFAULT_HEIGHT;
+  log('updatePosition: target=', JSON.stringify(tb), 'mySize=', curW, curH, 'offset=', userOffsetX, userOffsetY);
+  const { x, y } = calcPosition(tb, curW, curH);
+  mainWindowRef.setPosition(x, y);
+}
+
+export function computeAttachedBounds(outerW: number, outerH: number): Electron.Rectangle | null {
+  if (!isAttached || !targetHwnd || !mainWindowRef || mainWindowRef.isDestroyed()) return null;
+  const tb = getAccurateWindowBounds(targetHwnd);
+  if (!tb) return null;
+  const { x, y } = calcPosition(tb, outerW, outerH);
+  return { x, y, width: outerW, height: outerH };
 }
 
 function notifyStateChanged(): void {

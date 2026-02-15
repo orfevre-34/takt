@@ -21,6 +21,7 @@ import {
   getAttachState,
   isWindowAttached,
   cleanupWindowAttach,
+  computeAttachedBounds,
 } from './window-attach';
 
 let mainWindow: BrowserWindow | null = null;
@@ -92,17 +93,20 @@ function saveWindowBounds(bounds: WindowBounds): void {
   fs.writeFileSync(filePath, JSON.stringify(bounds), 'utf-8');
 }
 
-function saveMiniHeightToSettings(height: number): void {
-  if (!Number.isFinite(height) || height <= 0) return;
+function saveMiniSizeToSettings(width: number, height: number): void {
   const current = loadSettings();
   const currentWindowAttach = (current.windowAttach && typeof current.windowAttach === 'object')
     ? current.windowAttach as Record<string, unknown>
     : {};
+  const patch: Record<string, unknown> = {};
+  if (Number.isFinite(height) && height > 0) patch.miniHeight = Math.ceil(height);
+  if (Number.isFinite(width) && width > 0) patch.miniWidth = Math.ceil(width);
+  if (Object.keys(patch).length === 0) return;
   saveSettings({
     ...current,
     windowAttach: {
       ...currentWindowAttach,
-      miniHeight: Math.ceil(height),
+      ...patch,
     },
   });
 }
@@ -121,6 +125,9 @@ function mergeSettings(current: Record<string, unknown>, incoming: Record<string
     windowAttach: {
       ...currentWindowAttach,
       ...incomingWindowAttach,
+      // miniHeight/miniWidth は main プロセスが管理するため、disk の値を維持
+      miniHeight: currentWindowAttach.miniHeight ?? incomingWindowAttach.miniHeight,
+      miniWidth: currentWindowAttach.miniWidth ?? incomingWindowAttach.miniWidth,
     },
   };
 }
@@ -186,17 +193,27 @@ function createWindow(): void {
   mainWindow.on('blur', () => {
     isCtrlPressed = false;
   });
-  mainWindow.on('will-resize', (event) => {
-    if (isWindowAttached() && !isCtrlPressed) {
+  mainWindow.on('will-resize', (event, newBounds) => {
+    if (!isWindowAttached()) return;
+    if (!isCtrlPressed) {
       event.preventDefault();
+      return;
+    }
+    // Ctrl+リサイズ: アンカー位置を維持したまま setBounds で位置とサイズを同時適用
+    event.preventDefault();
+    const corrected = computeAttachedBounds(newBounds.width, newBounds.height);
+    if (corrected) {
+      mainWindow!.setBounds(corrected);
     }
   });
 
   let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
-  const debounceSaveMiniHeight = (height: number) => {
+  const debounceSaveMiniSize = () => {
     clearTimeout(saveMiniTimer);
     saveMiniTimer = setTimeout(() => {
-      saveMiniHeightToSettings(height);
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const cs = mainWindow.getContentSize();
+      saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
     }, 350);
   };
 
@@ -206,7 +223,7 @@ function createWindow(): void {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const h = mainWindow.getContentSize()[1] ?? 0;
     if (isWindowAttached()) {
-      debounceSaveMiniHeight(h);
+      debounceSaveMiniSize();
     }
     if (isMiniWidthResizeSuppressed()) return;
     if (h !== lastSentH) {
@@ -232,7 +249,8 @@ function createWindow(): void {
   mainWindow.on('close', (e) => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
       if (isWindowAttached()) {
-        saveMiniHeightToSettings(mainWindow.getContentSize()[1] ?? 0);
+        const cs = mainWindow.getContentSize();
+        saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
       } else {
         saveWindowBounds(mainWindow.getBounds());
       }
@@ -350,10 +368,10 @@ function setupIPC(): void {
   });
   ipcMain.on('resize-to-content', (_event, width: unknown, height: unknown, lockHeight: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
+    if (isWindowAttached()) return;
     const newWidth = typeof width === 'number' ? Math.max(380, Math.ceil(width)) : (mainWindow.getSize()[0] ?? 480);
     const newHeight = Math.max(150, Math.min(Math.ceil(height), 900));
     mainWindow.setContentSize(newWidth, newHeight);
-    // vertical時は高さをコンテンツに固定（ユーザーが縦に伸ばせないようにする）
     if (lockHeight) {
       mainWindow.setMinimumSize(mainWindow.getMinimumSize()[0] ?? 380, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
@@ -424,7 +442,7 @@ app.whenReady().then(() => {
     if (typeof wa.offsetX === 'number' || typeof wa.offsetY === 'number') {
       setUserOffset(wa.offsetX || 0, wa.offsetY || 0);
     }
-    startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight);
+    startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight, wa.miniWidth);
   }
   createTray(mainWindow!);
   startScheduler(mainWindow!);
@@ -438,7 +456,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   if (mainWindow && !mainWindow.isDestroyed() && isWindowAttached()) {
-    saveMiniHeightToSettings(mainWindow.getContentSize()[1] ?? 0);
+    const cs = mainWindow.getContentSize();
+    saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
   }
   cleanupWindowAttach();
   stopScheduler();

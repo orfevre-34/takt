@@ -29,23 +29,36 @@ import {
   type AnchorPosition,
 } from './window-attach';
 
+function parseCliArgs(str: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let inQuote = false;
+  for (const ch of str) {
+    if (ch === '"') { inQuote = !inQuote; continue; }
+    if (/\s/.test(ch) && !inQuote) {
+      if (current) args.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current) args.push(current);
+  return args;
+}
+
 let mainWindow: BrowserWindow | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 
-function getAppDataPath(): string {
-  return getDataDir();
-}
-
 function ensureAppDataDir(): void {
-  const dir = getAppDataPath();
+  const dir = getDataDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
 function loadSettings(): Record<string, unknown> {
-  const settingsPath = path.join(getAppDataPath(), 'settings.json');
+  const settingsPath = path.join(getDataDir(), 'settings.json');
   try {
     if (fs.existsSync(settingsPath)) {
       return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
@@ -57,12 +70,12 @@ function loadSettings(): Record<string, unknown> {
 }
 
 function saveSettings(settings: Record<string, unknown>): void {
-  const settingsPath = path.join(getAppDataPath(), 'settings.json');
+  const settingsPath = path.join(getDataDir(), 'settings.json');
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
 function loadSnapshot(filename: string): unknown {
-  const filePath = path.join(getAppDataPath(), filename);
+  const filePath = path.join(getDataDir(), filename);
   try {
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -74,14 +87,14 @@ function loadSnapshot(filename: string): unknown {
 }
 
 function saveSnapshot(filename: string, data: unknown): void {
-  const filePath = path.join(getAppDataPath(), filename);
+  const filePath = path.join(getDataDir(), filename);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 interface WindowBounds { x: number; y: number; width: number; height: number }
 
 function loadWindowBounds(): WindowBounds | null {
-  const filePath = path.join(getAppDataPath(), 'window-bounds.json');
+  const filePath = path.join(getDataDir(), 'window-bounds.json');
   try {
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -94,7 +107,7 @@ function loadWindowBounds(): WindowBounds | null {
 }
 
 function saveWindowBounds(bounds: WindowBounds): void {
-  const filePath = path.join(getAppDataPath(), 'window-bounds.json');
+  const filePath = path.join(getDataDir(), 'window-bounds.json');
   fs.writeFileSync(filePath, JSON.stringify(bounds), 'utf-8');
 }
 
@@ -300,21 +313,21 @@ function setupIPC(): void {
     const settings = loadSettings() as any;
     const npxPath = settings?.cliPaths?.npx || 'npx';
     const ccSettings = provider === 'claude' ? settings?.ccusage?.claude : settings?.ccusage?.codex;
-    const additionalArgs = ccSettings?.additionalArgs || '';
+    const additionalArgs: string = ccSettings?.additionalArgs || '';
 
-    const baseCmd = provider === 'claude'
-      ? `${npxPath} -y ccusage@latest daily`
-      : `${npxPath} -y @ccusage/codex@latest daily`;
-
+    const pkg = provider === 'claude' ? 'ccusage@latest' : '@ccusage/codex@latest';
     const now = new Date();
     const startOfMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}01`;
-    let cmd = `${baseCmd} -s ${startOfMonth} -j`;
-    if (additionalArgs) cmd += ` ${additionalArgs}`;
 
-    log('run-ccusage:', cmd);
-    const { exec } = require('child_process');
+    const args = ['-y', pkg, 'daily', '-s', startOfMonth, '-j'];
+    if (additionalArgs) {
+      args.push(...parseCliArgs(additionalArgs));
+    }
+
+    log('run-ccusage:', npxPath, args.join(' '));
+    const { execFile } = require('child_process');
     return new Promise((resolve) => {
-      exec(cmd, { timeout: 60000, env: { ...process.env } }, (error: any, stdout: string, stderr: string) => {
+      execFile(npxPath, args, { timeout: 60000, shell: process.platform === 'win32', env: { ...process.env } }, (error: any, stdout: string, stderr: string) => {
         if (error) {
           log('ccusage error:', error.message, stderr);
           resolve(null);
@@ -389,7 +402,12 @@ function setupIPC(): void {
     mainWindow?.webContents.send('trigger-refresh');
   });
   ipcMain.on('open-external', (_event, url: string) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(typeof url === 'string' ? url : '');
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        shell.openExternal(parsed.href);
+      }
+    } catch { /* invalid URL, ignore */ }
   });
   ipcMain.on('set-window-opacity', (_event, opacity: unknown) => {
     if (!mainWindow || typeof opacity !== 'number') return;

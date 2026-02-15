@@ -1,7 +1,3 @@
-export function formatPercent(value: number): string {
-  return `${Math.round(Math.max(0, Math.min(100, value)))}%`;
-}
-
 export function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
@@ -9,7 +5,6 @@ export function formatTokens(tokens: number): string {
 }
 
 export function formatCost(costUSD: number): string {
-  if (costUSD >= 1) return `$${costUSD.toFixed(2)}`;
   if (costUSD >= 0.01) return `$${costUSD.toFixed(2)}`;
   if (costUSD > 0) return `$${costUSD.toFixed(4)}`;
   return '$0.00';
@@ -25,15 +20,6 @@ export function formatTimeRemaining(resetAt: Date | string | null): string {
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
-}
-
-export function formatDate(date: Date): string {
-  return date.toLocaleDateString('ja-JP', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function getStartOfMonth(): string {

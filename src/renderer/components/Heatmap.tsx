@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import type { DailyUsageEntry } from '../types';
 import { HEATMAP_COLORS, getHeatmapLevel, calculateQuartiles } from '../utils/colors';
+import { getTodayISO } from '../utils/format';
 
 interface HeatmapProps {
   dailyUsage: DailyUsageEntry[];
@@ -14,48 +16,50 @@ interface HeatmapCell {
 }
 
 export function Heatmap({ dailyUsage, weeks = 5 }: HeatmapProps) {
-  // Build a 7-row x N-column grid (Sun=0 to Sat=6)
-  const tokensByDate = new Map(dailyUsage.map((d) => [d.date, d.totalTokens]));
-  const today = new Date();
-  const totalDays = weeks * 7;
+  const todayISO = getTodayISO();
 
-  const cells: HeatmapCell[] = [];
+  const { grid, quartiles } = useMemo(() => {
+    const tokensByDate = new Map(dailyUsage.map((d) => [d.date, d.totalTokens]));
+    const today = new Date();
+    const totalDays = weeks * 7;
 
-  // Start from (weeks) weeks ago, aligned to Sunday
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - totalDays + 1);
-  // Align to Sunday
-  startDate.setDate(startDate.getDate() - startDate.getDay());
+    const cells: HeatmapCell[] = [];
 
-  for (let i = 0; i < totalDays + 7; i++) {
-    const d = new Date(startDate);
-    d.setDate(startDate.getDate() + i);
-    if (d > today) break;
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const dayOfWeek = d.getDay();
-    const weekIndex = Math.floor(i / 7);
-    cells.push({
-      date: dateStr,
-      tokens: tokensByDate.get(dateStr) ?? 0,
-      dayOfWeek,
-      weekIndex,
-    });
-  }
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - totalDays + 1);
+    startDate.setDate(startDate.getDate() - startDate.getDay());
 
-  const quartiles = calculateQuartiles(cells.map((c) => c.tokens));
-  const maxWeek = Math.max(...cells.map((c) => c.weekIndex), 0);
-
-  // Group by week
-  const grid: Array<Array<HeatmapCell | null>> = [];
-  for (let w = 0; w <= maxWeek; w++) {
-    const weekCells: Array<HeatmapCell | null> = Array(7).fill(null);
-    cells
-      .filter((c) => c.weekIndex === w)
-      .forEach((c) => {
-        weekCells[c.dayOfWeek] = c;
+    for (let i = 0; i < totalDays + 7; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      if (d > today) break;
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dayOfWeek = d.getDay();
+      const weekIndex = Math.floor(i / 7);
+      cells.push({
+        date: dateStr,
+        tokens: tokensByDate.get(dateStr) ?? 0,
+        dayOfWeek,
+        weekIndex,
       });
-    grid.push(weekCells);
-  }
+    }
+
+    const q = calculateQuartiles(cells.map((c) => c.tokens));
+    const maxWeek = Math.max(...cells.map((c) => c.weekIndex), 0);
+
+    const g: Array<Array<HeatmapCell | null>> = [];
+    for (let w = 0; w <= maxWeek; w++) {
+      const weekCells: Array<HeatmapCell | null> = Array(7).fill(null);
+      cells
+        .filter((c) => c.weekIndex === w)
+        .forEach((c) => {
+          weekCells[c.dayOfWeek] = c;
+        });
+      g.push(weekCells);
+    }
+
+    return { grid: g, quartiles: q };
+  }, [dailyUsage, weeks, todayISO]);
 
   const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 

@@ -42,6 +42,34 @@ const DEFAULT_SETTINGS: Settings = {
   },
 };
 
+function deepMergeSettings(saved: Partial<Settings>): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    providers: {
+      claude: { ...DEFAULT_SETTINGS.providers.claude, ...saved.providers?.claude },
+      codex: { ...DEFAULT_SETTINGS.providers.codex, ...saved.providers?.codex },
+    },
+    thresholds: {
+      claude: {
+        primary: { ...DEFAULT_SETTINGS.thresholds.claude.primary, ...saved.thresholds?.claude?.primary },
+        secondary: { ...DEFAULT_SETTINGS.thresholds.claude.secondary, ...saved.thresholds?.claude?.secondary },
+      },
+      codex: {
+        primary: { ...DEFAULT_SETTINGS.thresholds.codex.primary, ...saved.thresholds?.codex?.primary },
+        secondary: { ...DEFAULT_SETTINGS.thresholds.codex.secondary, ...saved.thresholds?.codex?.secondary },
+      },
+    },
+    cliPaths: { ...DEFAULT_SETTINGS.cliPaths, ...saved.cliPaths },
+    ccusage: {
+      claude: { ...DEFAULT_SETTINGS.ccusage.claude, ...saved.ccusage?.claude },
+      codex: { ...DEFAULT_SETTINGS.ccusage.codex, ...saved.ccusage?.codex },
+    },
+    colors: { ...DEFAULT_SETTINGS.colors, ...saved.colors },
+    windowAttach: { ...DEFAULT_SETTINGS.windowAttach, ...saved.windowAttach },
+  };
+}
+
 export function useSettings() {
   const { settings, setSettings } = useAppStore();
 
@@ -49,15 +77,7 @@ export function useSettings() {
     window.electronAPI
       ?.getSettings()
       .then((saved) => {
-        const s = (saved ?? {}) as Partial<Settings>;
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...s,
-          windowAttach: {
-            ...DEFAULT_SETTINGS.windowAttach,
-            ...(s.windowAttach ?? {}),
-          },
-        });
+        setSettings(deepMergeSettings(saved ?? {}));
       })
       .catch(() => {
         setSettings(DEFAULT_SETTINGS);

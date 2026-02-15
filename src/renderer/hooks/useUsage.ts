@@ -1,5 +1,15 @@
 import { useEffect, useCallback } from 'react';
 import { useAppStore } from '../store';
+import type { UsageSnapshot, UsageFetchResult } from '../types';
+
+function isErrorResult(r: UsageFetchResult | null): r is { ok: false; error: string } {
+  return r != null && 'ok' in r && (r as { ok: boolean }).ok === false;
+}
+
+function isSnapshot(r: UsageFetchResult | null): r is UsageSnapshot {
+  if (!r || isErrorResult(r)) return false;
+  return 'primaryWindow' in r || 'secondaryWindow' in r;
+}
 
 export function useUsage() {
   const {
@@ -7,48 +17,49 @@ export function useUsage() {
     setClaudeUsage, setCodexUsage, setLoading, setError,
   } = useAppStore();
 
+  const claudeEnabled = settings?.providers.claude.enabled ?? false;
+  const codexEnabled = settings?.providers.codex.enabled ?? false;
+
   const refresh = useCallback(async () => {
     if (!settings) return;
     setLoading(true);
     setError(null);
     const errors: string[] = [];
     try {
-      if (settings.providers.claude.enabled) {
-        // まずキャッシュされたスナップショットを読む
+      if (claudeEnabled) {
         const cached = await window.electronAPI?.getUsageSnapshot('claude');
-        if (cached) setClaudeUsage(cached as any);
-        // APIから最新データを取得
+        if (cached) setClaudeUsage(cached);
         try {
-          const result = await (window.electronAPI as any)?.fetchUsage('claude');
-          if (result?.ok === false) {
+          const result = await window.electronAPI?.fetchUsage('claude');
+          if (isErrorResult(result)) {
             if (result.error === 'not_logged_in' || result.error === 'no_org_id') {
               if (!cached) errors.push('Claude: Login required. Please log in from Settings.');
             } else if (result.error !== 'already_fetching') {
               errors.push(`Claude: ${result.error}`);
             }
-          } else if (result?.primaryWindow || result?.secondaryWindow) {
+          } else if (isSnapshot(result)) {
             setClaudeUsage(result);
           }
-        } catch (e: any) {
-          errors.push(`Claude: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+          errors.push(`Claude: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
-      if (settings.providers.codex.enabled) {
+      if (codexEnabled) {
         const cached = await window.electronAPI?.getUsageSnapshot('codex');
-        if (cached) setCodexUsage(cached as any);
+        if (cached) setCodexUsage(cached);
         try {
-          const result = await (window.electronAPI as any)?.fetchUsage('codex');
-          if (result?.ok === false) {
+          const result = await window.electronAPI?.fetchUsage('codex');
+          if (isErrorResult(result)) {
             if (result.error === 'not_logged_in') {
               if (!cached) errors.push('Codex: Login required. Please log in from Settings.');
             } else if (result.error !== 'already_fetching') {
               errors.push(`Codex: ${result.error}`);
             }
-          } else if (result?.primaryWindow || result?.secondaryWindow) {
+          } else if (isSnapshot(result)) {
             setCodexUsage(result);
           }
-        } catch (e: any) {
-          errors.push(`Codex: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+          errors.push(`Codex: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
     } catch (err) {
@@ -57,7 +68,7 @@ export function useUsage() {
       if (errors.length > 0) setError(errors.join(' / '));
       setLoading(false);
     }
-  }, [settings, setClaudeUsage, setCodexUsage, setLoading, setError]);
+  }, [claudeEnabled, codexEnabled, settings, setClaudeUsage, setCodexUsage, setLoading, setError]);
 
   useEffect(() => {
     refresh();
@@ -65,7 +76,7 @@ export function useUsage() {
 
   // メインプロセスからのプッシュ更新
   useEffect(() => {
-    const cleanup = window.electronAPI?.onUsageUpdated((snapshot: any) => {
+    const cleanup = window.electronAPI?.onUsageUpdated((snapshot) => {
       if (snapshot.provider === 'claude') setClaudeUsage(snapshot);
       else setCodexUsage(snapshot);
     });

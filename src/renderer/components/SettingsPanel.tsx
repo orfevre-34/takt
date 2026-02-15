@@ -1,33 +1,18 @@
-import { useState, useEffect } from 'react';
 import type { Settings, DisplayMode, LayoutOrientation, AttachState, AnchorPosition } from '../types';
 
 interface SettingsPanelProps {
   settings: Settings;
+  attachState: AttachState;
   onSave: (settings: Settings) => void;
   onClose: () => void;
 }
 
-export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ settings, attachState, onSave, onClose }: SettingsPanelProps) {
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onSave({ ...settings, [key]: value });
   };
 
-  const windowAttach = settings.windowAttach ?? {
-    enabled: false,
-    targetProcessName: '',
-    targetPath: '',
-    anchor: 'top-right' as const,
-    offsetX: 0,
-    offsetY: 0,
-    miniHeight: 48,
-  };
-  const [attachState, setAttachState] = useState<AttachState>({ attached: false, target: null, anchor: windowAttach.anchor, targetProcessName: '' });
-
-  useEffect(() => {
-    window.electronAPI?.getAttachState?.().then(setAttachState).catch(() => {});
-    const cleanup = window.electronAPI?.onAttachStateChanged?.((state: AttachState) => setAttachState(state));
-    return cleanup;
-  }, []);
+  const windowAttach = settings.windowAttach;
 
   return (
     <div
@@ -69,7 +54,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           {settings.providers.claude.enabled && (
             <div className="ml-6 mb-2 space-y-1.5">
               <button
-                onClick={() => (window.electronAPI as any)?.openLogin?.('claude')}
+                onClick={() => window.electronAPI?.openLogin?.('claude')}
                 className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-300 text-xs font-medium py-1.5 rounded border border-orange-700/40 transition-colors"
               >
                 Log in to Claude.ai
@@ -105,7 +90,7 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           {settings.providers.codex.enabled && (
             <div className="ml-6 mt-1.5">
               <button
-                onClick={() => (window.electronAPI as any)?.openLogin?.('codex')}
+                onClick={() => window.electronAPI?.openLogin?.('codex')}
                 className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-300 text-xs font-medium py-1.5 rounded border border-orange-700/40 transition-colors"
               >
                 Log in to ChatGPT

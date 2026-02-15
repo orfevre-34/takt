@@ -18,7 +18,3 @@ export function stopScheduler(): void {
     refreshInterval = null;
   }
 }
-
-export function restartScheduler(mainWindow: BrowserWindow, intervalMs: number): void {
-  startScheduler(mainWindow, intervalMs);
-}

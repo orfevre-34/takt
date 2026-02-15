@@ -28,11 +28,6 @@ export function getStatusColor(
   return colors[level];
 }
 
-export function getDisplayPercent(usedPercent: number, mode: 'used' | 'remaining'): number {
-  const value = mode === 'remaining' ? 100 - usedPercent : usedPercent;
-  return Math.max(0, Math.min(100, value));
-}
-
 // Heatmap 5-level colors (GitHub contributions style)
 export const HEATMAP_COLORS = [
   '#161b22', // level 0: no activity

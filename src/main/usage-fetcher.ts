@@ -125,7 +125,7 @@ export async function fetchClaudeUsage(): Promise<unknown> {
 
     // セッションCookieを確認
     const cookies = await ses.cookies.get({ url: 'https://claude.ai' });
-    log('Claude cookies:', cookies.map(c => c.name).join(', '));
+    log('Claude cookies:', cookies.length, 'found');
 
     const sessionCookie = cookies.find(c => c.name === 'sessionKey');
     if (!sessionCookie) {
@@ -176,7 +176,7 @@ export async function fetchCodexUsage(): Promise<unknown> {
     const ses = session.fromPartition(CODEX_PARTITION);
 
     const cookies = await ses.cookies.get({ url: 'https://chatgpt.com' });
-    log('Codex cookies:', cookies.map(c => c.name).join(', '));
+    log('Codex cookies:', cookies.length, 'found');
     if (cookies.length === 0) {
       return { ok: false, error: 'not_logged_in' };
     }

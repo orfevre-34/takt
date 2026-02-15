@@ -102,7 +102,7 @@ export function ProviderSection({
 
       {/* ログインプロンプト（両方 null のときのみ） */}
       {showUsage && !hasUsageData && !hasTokenData && (
-        <div className={hasTokenData ? 'mb-3' : ''}>
+        <div>
           <p className="text-xs text-zinc-500 mb-2">
             No data available. Please log in.
           </p>

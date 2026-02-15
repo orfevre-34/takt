@@ -29,7 +29,7 @@ export function App() {
       if (state.attached) setSettingsOpen(false);
     });
     return cleanup;
-  }, []);
+  }, [setSettingsOpen]);
 
   // トレイメニューから設定を開く
   useEffect(() => {
@@ -141,6 +141,7 @@ export function App() {
         {settingsOpen && (
           <SettingsPanel
             settings={settings}
+            attachState={attachState}
             onSave={updateSettings}
             onClose={() => setSettingsOpen(false)}
           />
@@ -236,7 +237,7 @@ export function App() {
             showToken={settings.ccusage.claude.enabled}
             showBg={showBg}
             backgroundOpacity={settings.backgroundOpacity}
-            onLogin={() => (window.electronAPI as any)?.openLogin?.('claude')}
+            onLogin={() => window.electronAPI?.openLogin?.('claude')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
           />
         )}
@@ -273,7 +274,7 @@ export function App() {
             showToken={settings.ccusage.codex.enabled}
             showBg={showBg}
             backgroundOpacity={settings.backgroundOpacity}
-            onLogin={() => (window.electronAPI as any)?.openLogin?.('codex')}
+            onLogin={() => window.electronAPI?.openLogin?.('codex')}
             className={isHorizontal ? 'flex-shrink-0' : undefined}
           />
         )}
@@ -298,6 +299,7 @@ export function App() {
       {settingsOpen && (
         <SettingsPanel
           settings={settings}
+          attachState={attachState}
           onSave={updateSettings}
           onClose={() => setSettingsOpen(false)}
         />

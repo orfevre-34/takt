@@ -47,36 +47,6 @@ export interface UsageSnapshot {
   secondaryWindow: UsageWindow | null; // 7d window
 }
 
-// Claude API Response
-export interface ClaudeUsageResponse {
-  five_hour?: { utilization?: number; resets_at?: string };
-  seven_day?: { utilization?: number; resets_at?: string };
-  seven_day_oauth_apps?: { utilization?: number; resets_at?: string };
-  seven_day_opus?: { utilization?: number; resets_at?: string };
-  seven_day_sonnet?: { utilization?: number; resets_at?: string };
-  iguana_necktie?: { utilization?: number; resets_at?: string };
-  extra_usage?: { utilization?: number; resets_at?: string };
-}
-
-// Codex API Response
-export interface CodexUsageResponse {
-  plan_type?: string;
-  rate_limit?: {
-    primary_window?: {
-      used_percent?: number;
-      limit_window_seconds?: number;
-      reset_after_seconds?: number;
-      reset_at?: number; // unix timestamp
-    };
-    secondary_window?: {
-      used_percent?: number;
-      limit_window_seconds?: number;
-      reset_after_seconds?: number;
-      reset_at?: number;
-    };
-  };
-}
-
 // Token Usage Period
 export interface TokenUsagePeriod {
   costUSD: number;
@@ -97,18 +67,6 @@ export interface TokenUsageSnapshot {
   thisWeek: TokenUsagePeriod;
   thisMonth: TokenUsagePeriod;
   dailyUsage: DailyUsageEntry[];
-}
-
-// ccusage Claude CLI Response
-export interface CCUsageClaudeResponse {
-  daily: Array<{ date: string; totalTokens: number; totalCost: number }>;
-  totals: { totalTokens: number; totalCost: number };
-}
-
-// ccusage Codex CLI Response
-export interface CCUsageCodexResponse {
-  daily: Array<{ date: string; totalTokens: number; costUSD: number }>;
-  totals: { totalTokens: number; costUSD: number };
 }
 
 // Settings
@@ -195,13 +153,32 @@ export type IpcChannel =
   | 'attach-state-changed'
   | 'open-attach-settings';
 
+// Usage fetch result (success returns snapshot fields, failure returns ok+error)
+export type UsageFetchResult =
+  | UsageSnapshot
+  | { ok: false; error: string };
+
+// Raw ccusage CLI output (totalCost for claude, costUSD for older codex versions)
+export interface CCUsageRawEntry {
+  date: string;
+  totalTokens: number;
+  totalCost?: number;
+  costUSD?: number;
+}
+
+export interface CCUsageRawOutput {
+  daily: CCUsageRawEntry[];
+  totals: { totalTokens: number; totalCost?: number; costUSD?: number };
+}
+
 // Electron API exposed to renderer
 export interface ElectronAPI {
   platform: string;
-  getSettings: () => Promise<Settings>;
+  getSettings: () => Promise<Partial<Settings> | null>;
   saveSettings: (settings: Settings) => Promise<void>;
-  fetchUsage: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
-  runCcusage: (provider: UsageProvider) => Promise<TokenUsageSnapshot | null>;
+  fetchUsage: (provider: UsageProvider) => Promise<UsageFetchResult | null>;
+  runCcusage: (provider: UsageProvider) => Promise<CCUsageRawOutput | null>;
+  openLogin: (provider: UsageProvider) => Promise<{ ok: boolean; snapshot?: UsageSnapshot; error?: string }>;
   setAlwaysOnTop: (value: boolean) => Promise<void>;
   resizeToContent: (width: number | null, height: number, lockHeight?: boolean) => void;
   getUsageSnapshot: (provider: UsageProvider) => Promise<UsageSnapshot | null>;

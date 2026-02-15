@@ -1,4 +1,5 @@
-import type { Settings, DisplayMode, LayoutOrientation } from '../types';
+import { useState, useEffect } from 'react';
+import type { Settings, DisplayMode, LayoutOrientation, AttachState, AnchorPosition } from '../types';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -10,6 +11,23 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onSave({ ...settings, [key]: value });
   };
+
+  const windowAttach = settings.windowAttach ?? {
+    enabled: false,
+    targetProcessName: '',
+    targetPath: '',
+    anchor: 'top-right' as const,
+    offsetX: 0,
+    offsetY: 0,
+    miniHeight: 48,
+  };
+  const [attachState, setAttachState] = useState<AttachState>({ attached: false, target: null, anchor: windowAttach.anchor, targetProcessName: '' });
+
+  useEffect(() => {
+    window.electronAPI?.getAttachState?.().then(setAttachState).catch(() => {});
+    const cleanup = window.electronAPI?.onAttachStateChanged?.((state: AttachState) => setAttachState(state));
+    return cleanup;
+  }, []);
 
   return (
     <div
@@ -30,7 +48,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </button>
         </div>
 
-        {/* Providers */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Providers
@@ -97,7 +114,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           )}
         </section>
 
-        {/* Display */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Display
@@ -180,7 +196,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </label>
         </section>
 
-        {/* Refresh */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Refresh Interval
@@ -200,7 +215,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </div>
         </section>
 
-        {/* ccusage */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             ccusage (Token Usage)
@@ -235,7 +249,6 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
           </label>
         </section>
 
-        {/* CLI Paths */}
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             CLI Paths
@@ -253,6 +266,101 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               />
             </div>
           ))}
+        </section>
+
+        <section className="mb-4">
+          <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
+            Window Attach
+          </h3>
+
+          <div className="space-y-2">
+            <label className="text-[10px] text-zinc-500 block">Target Application</label>
+            <div className="flex gap-1 items-center">
+              <div className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-300 truncate min-w-0">
+                {windowAttach.targetProcessName
+                  ? <span>{windowAttach.targetProcessName}<span className="text-zinc-500 ml-1">(.exe)</span></span>
+                  : <span className="text-zinc-500">Not selected</span>
+                }
+              </div>
+              <button
+                onClick={async () => {
+                  const result = await window.electronAPI?.selectExecutable?.();
+                  if (result) {
+                    const updated = { ...windowAttach, enabled: true, targetProcessName: result.processName, targetPath: result.path };
+                    update('windowAttach', updated);
+                    await window.electronAPI?.setAttachTarget?.(result.processName, updated.anchor);
+                  }
+                }}
+                className="px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-400 hover:text-zinc-200 transition-colors whitespace-nowrap"
+              >
+                Browse...
+              </button>
+            </div>
+
+            {windowAttach.enabled && windowAttach.targetProcessName && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className={`inline-block w-2 h-2 rounded-full ${attachState.attached ? 'bg-green-500' : 'bg-zinc-600'}`} />
+                <span className="text-zinc-400">
+                  {attachState.attached
+                    ? `Attached to ${attachState.target?.title ?? windowAttach.targetProcessName}`
+                    : 'Waiting for target...'}
+                </span>
+              </div>
+            )}
+
+            {windowAttach.enabled && windowAttach.targetProcessName && !attachState.attached && (
+              <button
+                onClick={() => window.electronAPI?.reattachWindow?.()}
+                className="w-full bg-green-700/30 hover:bg-green-700/50 text-green-300 text-xs font-medium py-1.5 rounded border border-green-700/40 transition-colors"
+              >
+                Re-attach
+              </button>
+            )}
+            {windowAttach.enabled && windowAttach.targetProcessName && (
+              <div className="flex gap-1.5">
+                <button
+                  onClick={async () => {
+                    update('windowAttach', { ...windowAttach, offsetX: 0, offsetY: 0, miniHeight: 48 });
+                    await window.electronAPI?.resetAttachLayout?.();
+                  }}
+                  className="flex-1 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-300 text-xs font-medium py-1.5 rounded border border-zinc-600/40 transition-colors"
+                >
+                  Reset Layout
+                </button>
+                <button
+                  onClick={async () => {
+                    update('windowAttach', { ...windowAttach, enabled: false, targetProcessName: '', targetPath: '' });
+                    await window.electronAPI?.clearAttachTarget?.();
+                  }}
+                  className="flex-1 bg-red-700/30 hover:bg-red-700/50 text-red-300 text-xs font-medium py-1.5 rounded border border-red-700/40 transition-colors"
+                >
+                  Disable
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3">
+            <label className="text-[10px] text-zinc-500 mb-1 block">Anchor Position</label>
+            <div className="grid grid-cols-2 gap-1">
+              {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as AnchorPosition[]).map((pos) => (
+                <button
+                  key={pos}
+                  onClick={() => {
+                    update('windowAttach', { ...windowAttach, anchor: pos });
+                    window.electronAPI?.setAttachAnchor?.(pos);
+                  }}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                    windowAttach.anchor === pos
+                      ? 'bg-zinc-700 text-zinc-100'
+                      : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {pos.replace('-', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
 
       </div>

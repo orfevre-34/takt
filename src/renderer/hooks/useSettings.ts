@@ -19,7 +19,9 @@ const DEFAULT_SETTINGS: Settings = {
     },
   },
   displayMode: 'used',
+  layout: 'vertical',
   alwaysOnTop: false,
+  launchAtLogin: false,
   language: 'ja',
   cliPaths: { npx: 'npx', claude: 'claude', codex: 'codex' },
   ccusage: {
@@ -29,6 +31,15 @@ const DEFAULT_SETTINGS: Settings = {
   colors: { normal: '#22c55e', warning: '#f59e0b', danger: '#ef4444' },
   transparentWhenInactive: true,
   backgroundOpacity: 80,
+  windowAttach: {
+    enabled: false,
+    targetProcessName: '',
+    targetPath: '',
+    anchor: 'top-right' as const,
+    offsetX: 0,
+    offsetY: 0,
+    miniHeight: 48,
+  },
 };
 
 export function useSettings() {
@@ -38,7 +49,15 @@ export function useSettings() {
     window.electronAPI
       ?.getSettings()
       .then((saved) => {
-        setSettings({ ...DEFAULT_SETTINGS, ...saved });
+        const s = (saved ?? {}) as Partial<Settings>;
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...s,
+          windowAttach: {
+            ...DEFAULT_SETTINGS.windowAttach,
+            ...(s.windowAttach ?? {}),
+          },
+        });
       })
       .catch(() => {
         setSettings(DEFAULT_SETTINGS);

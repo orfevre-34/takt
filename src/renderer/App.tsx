@@ -5,7 +5,7 @@ import { useSettings } from './hooks/useSettings';
 import { useUsage } from './hooks/useUsage';
 import { useTokenUsage } from './hooks/useTokenUsage';
 import { useAppStore } from './store';
-import { getStatusColor, getStatusLevel } from './utils/colors';
+import { getStatusColor } from './utils/colors';
 import { formatTimeRemaining } from './utils/format';
 
 export function App() {
@@ -79,7 +79,7 @@ export function App() {
     const width = isHorizontal && contentRef.current
       ? contentRef.current.offsetWidth + 24
       : null;
-    window.electronAPI?.resizeToContent(width, height);
+    window.electronAPI?.resizeToContent(width, height, !isHorizontal);
   }, [isHorizontal]);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export function App() {
   useEffect(() => {
     if (prevLayoutRef.current === 'horizontal' && settings.layout !== 'horizontal') {
       const height = containerRef.current?.scrollHeight ?? 300;
-      window.electronAPI?.resizeToContent(480, height);
+      window.electronAPI?.resizeToContent(480, height, true);
     }
     prevLayoutRef.current = settings.layout;
   }, [settings.layout]);
@@ -170,13 +170,7 @@ export function App() {
                 settings.colors,
               )
             }
-            getLevel={(p) =>
-              getStatusLevel(
-                p,
-                settings.thresholds.claude.primary.warningPercent,
-                settings.thresholds.claude.primary.dangerPercent,
-              )
-            }
+
             formatTime={formatTimeRemaining}
             usageFetchedAt={claudeUsage?.fetchedAt}
             tokenUsage={
@@ -212,13 +206,6 @@ export function App() {
                 settings.thresholds.codex.primary.warningPercent,
                 settings.thresholds.codex.primary.dangerPercent,
                 settings.colors,
-              )
-            }
-            getLevel={(p) =>
-              getStatusLevel(
-                p,
-                settings.thresholds.codex.primary.warningPercent,
-                settings.thresholds.codex.primary.dangerPercent,
               )
             }
             formatTime={formatTimeRemaining}

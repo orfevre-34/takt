@@ -76,6 +76,8 @@ export function UsageCard({
               color={getColor(w.usedPercent)}
               displayMode={displayMode}
               sublabel={formatTime(w.resetAt)}
+              resetAt={w.resetAt}
+              limitWindowSeconds={w.limitWindowSeconds}
             />
             <div className="mt-1.5 flex items-center gap-1.5">
               <span className="text-[10px] text-zinc-400">{WINDOW_LABELS[w.kind]}</span>

@@ -102,7 +102,7 @@ function createWindow(): void {
     x: useSaved ? savedBounds!.x : undefined,
     y: useSaved ? savedBounds!.y : undefined,
     minWidth: 380,
-    minHeight: 300,
+    minHeight: 150,
     frame: false,
     transparent: true,
     skipTaskbar: true,
@@ -247,10 +247,19 @@ function setupIPC(): void {
       return { ok: false, error: err.message || String(err) };
     }
   });
-  ipcMain.on('resize-to-content', (_event, width: unknown, height: unknown) => {
+  ipcMain.on('resize-to-content', (_event, width: unknown, height: unknown, lockHeight: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
     const newWidth = typeof width === 'number' ? Math.max(380, Math.ceil(width)) : (mainWindow.getSize()[0] ?? 480);
-    mainWindow.setSize(newWidth, Math.max(300, Math.min(Math.ceil(height), 900)));
+    const newHeight = Math.max(150, Math.min(Math.ceil(height), 900));
+    mainWindow.setContentSize(newWidth, newHeight);
+    // vertical時は高さをコンテンツに固定（ユーザーが縦に伸ばせないようにする）
+    if (lockHeight) {
+      mainWindow.setMinimumSize(mainWindow.getMinimumSize()[0] ?? 380, newHeight);
+      mainWindow.setMaximumSize(10000, newHeight);
+    } else {
+      mainWindow.setMinimumSize(380, 150);
+      mainWindow.setMaximumSize(10000, 10000);
+    }
   });
   ipcMain.on('app-quit', () => app.quit());
   ipcMain.on('refresh-now', () => {

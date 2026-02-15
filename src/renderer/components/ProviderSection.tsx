@@ -2,12 +2,10 @@ import type {
   UsageProvider,
   UsageWindow,
   DisplayMode,
-  StatusLevel,
   TokenUsagePeriod,
   DailyUsageEntry,
 } from '../types';
 import { UsageDonut } from './UsageDonut';
-import { StatusBadge } from './StatusBadge';
 import { Heatmap } from './Heatmap';
 import { formatTokens, formatCost } from '../utils/format';
 
@@ -17,7 +15,6 @@ interface ProviderSectionProps {
   secondaryWindow: UsageWindow | null;
   displayMode: DisplayMode;
   getColor: (percent: number) => string;
-  getLevel: (percent: number) => StatusLevel;
   formatTime: (resetAt: string | null) => string;
   usageFetchedAt?: string;
   tokenUsage?: {
@@ -45,13 +42,14 @@ const WINDOW_LABELS: Record<string, string> = {
   secondary: '7d Window',
 };
 
+const TOKEN_PLACEHOLDER_LABELS = ['Today', 'Week', 'Month'];
+
 export function ProviderSection({
   provider,
   primaryWindow,
   secondaryWindow,
   displayMode,
   getColor,
-  getLevel,
   formatTime,
   usageFetchedAt,
   tokenUsage,
@@ -66,6 +64,8 @@ export function ProviderSection({
   const hasUsageData = windows.length > 0;
   const hasTokenData = showToken && !!tokenUsage;
   const hasHeatmap = hasTokenData && tokenUsage!.dailyUsage.length > 0;
+  // ccusage有効だがデータ未取得 → プレースホルダー表示
+  const showTokenPlaceholder = showToken && !tokenUsage;
 
   const fetchedAt = usageFetchedAt || tokenUsage?.fetchedAt;
 
@@ -116,17 +116,11 @@ export function ProviderSection({
       {hasUsageData && (
         <div
           className={`flex ${
-            hasHeatmap ? 'justify-between' : 'justify-around'
-          } items-start`}
+            hasHeatmap || showTokenPlaceholder ? 'justify-between' : 'justify-around'
+          } items-center gap-4`}
         >
-          {/* ドーナツ群（1つの場合はflex-1で左エリア中央に配置） */}
-          <div
-            className={`flex gap-3 ${
-              windows.length === 1
-                ? 'flex-1 justify-center'
-                : 'flex-shrink-0'
-            }`}
-          >
+          {/* ドーナツ群（1つの場合はflex-1で中央配置） */}
+          <div className="flex gap-3 flex-1 justify-center">
             {windows.map((w) => (
               <div key={w.kind} className="flex flex-col items-center">
                 <UsageDonut
@@ -135,29 +129,37 @@ export function ProviderSection({
                   strokeWidth={6}
                   color={getColor(w.usedPercent)}
                   displayMode={displayMode}
-                  sublabel={formatTime(w.resetAt)}
+                  resetAt={w.resetAt}
+                  limitWindowSeconds={w.limitWindowSeconds}
                 />
-                <div className="mt-1 flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-400">
-                    {WINDOW_LABELS[w.kind]}
+                <span className="mt-1 text-[10px] text-zinc-400">
+                  {WINDOW_LABELS[w.kind]}
+                </span>
+                {w.resetAt && (
+                  <span className="text-[10px] text-zinc-500">
+                    {new Date(w.resetAt).toLocaleString('ja-JP', {
+                      month: 'numeric',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </span>
-                  <StatusBadge level={getLevel(w.usedPercent)} />
-                </div>
+                )}
               </div>
             ))}
           </div>
 
-          {/* ヒートマップ（ドーナツと横並び） */}
-          {hasHeatmap && (
-            <div className="flex-shrink-0 mt-1">
-              <Heatmap dailyUsage={tokenUsage!.dailyUsage} />
+          {/* ヒートマップ or プレースホルダー（ドーナツと横並び） */}
+          {(hasHeatmap || showTokenPlaceholder) && (
+            <div className={`flex-shrink-0${showTokenPlaceholder ? ' animate-pulse opacity-40' : ''}`}>
+              <Heatmap dailyUsage={hasHeatmap ? tokenUsage!.dailyUsage : []} />
             </div>
           )}
         </div>
       )}
 
       {/* トークン統計（テキスト情報を下に） */}
-      {hasTokenData && (
+      {(hasTokenData || showTokenPlaceholder) && (
         <div
           className={
             hasUsageData
@@ -166,25 +168,39 @@ export function ProviderSection({
           }
         >
           <div className="grid grid-cols-3 gap-2">
-            {tokenPeriods.map(({ label, data }) => (
-              <div key={label} className="text-center">
-                <div className="text-[10px] text-zinc-500 mb-0.5">
-                  {label}
-                </div>
-                <div className="text-sm font-bold text-zinc-100">
-                  {formatTokens(data.totalTokens)}
-                </div>
-                <div className="text-[10px] text-zinc-400">
-                  {formatCost(data.costUSD)}
-                </div>
-              </div>
-            ))}
+            {hasTokenData
+              ? tokenPeriods.map(({ label, data }) => (
+                  <div key={label} className="text-center">
+                    <div className="text-[10px] text-zinc-500 mb-0.5">
+                      {label}
+                    </div>
+                    <div className="text-sm font-bold text-zinc-100">
+                      {formatTokens(data.totalTokens)}
+                    </div>
+                    <div className="text-[10px] text-zinc-400">
+                      {formatCost(data.costUSD)}
+                    </div>
+                  </div>
+                ))
+              : TOKEN_PLACEHOLDER_LABELS.map((label) => (
+                  <div key={label} className="text-center animate-pulse">
+                    <div className="text-[10px] text-zinc-500 mb-0.5">
+                      {label}
+                    </div>
+                    <div className="text-sm font-bold text-zinc-700">
+                      —
+                    </div>
+                    <div className="text-[10px] text-zinc-700">
+                      —
+                    </div>
+                  </div>
+                ))}
           </div>
 
           {/* ヒートマップ（ドーナツなし時は下に配置） */}
-          {!hasUsageData && hasHeatmap && (
-            <div className="mt-2">
-              <Heatmap dailyUsage={tokenUsage!.dailyUsage} />
+          {!hasUsageData && (hasHeatmap || showTokenPlaceholder) && (
+            <div className={`mt-2${showTokenPlaceholder ? ' animate-pulse opacity-40' : ''}`}>
+              <Heatmap dailyUsage={hasHeatmap ? tokenUsage!.dailyUsage : []} />
             </div>
           )}
         </div>

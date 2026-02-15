@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runCcusage: (provider: string) => ipcRenderer.invoke('run-ccusage', provider),
   openLogin: (provider: string) => ipcRenderer.invoke('open-login', provider),
   fetchUsage: (provider: string) => ipcRenderer.invoke('fetch-usage', provider),
-  resizeToContent: (width: number | null, height: number) => ipcRenderer.send('resize-to-content', width, height),
+  resizeToContent: (width: number | null, height: number, lockHeight?: boolean) => ipcRenderer.send('resize-to-content', width, height, lockHeight),
   appQuit: () => ipcRenderer.send('app-quit'),
   refreshNow: () => ipcRenderer.send('refresh-now'),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),

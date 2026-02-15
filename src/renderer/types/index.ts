@@ -154,7 +154,7 @@ export interface ElectronAPI {
   fetchUsage: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
   runCcusage: (provider: UsageProvider) => Promise<TokenUsageSnapshot | null>;
   setAlwaysOnTop: (value: boolean) => Promise<void>;
-  resizeToContent: (width: number | null, height: number) => void;
+  resizeToContent: (width: number | null, height: number, lockHeight?: boolean) => void;
   getUsageSnapshot: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
   saveUsageSnapshot: (snapshot: UsageSnapshot) => Promise<void>;
   appQuit: () => void;

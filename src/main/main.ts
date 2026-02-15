@@ -161,6 +161,8 @@ function setupIPC(): void {
   ipcMain.handle('get-settings', () => loadSettings());
   ipcMain.handle('save-settings', (_event, settings: Record<string, unknown>) => {
     saveSettings(settings);
+    // Windows起動時の自動起動を設定
+    app.setLoginItemSettings({ openAtLogin: !!settings.launchAtLogin });
   });
   ipcMain.handle('get-usage-snapshot', (_event, provider: string) => {
     const filename = provider === 'claude' ? 'usage_snapshot_claude.json' : 'usage_snapshot.json';

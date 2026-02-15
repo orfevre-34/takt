@@ -169,6 +169,15 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               </span>
             </div>
           </div>
+          <label className="flex items-center gap-2 mt-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={settings.launchAtLogin}
+              onChange={(e) => update('launchAtLogin', e.target.checked)}
+              className="accent-green-500"
+            />
+            Launch at Login
+          </label>
         </section>
 
         {/* Refresh */}

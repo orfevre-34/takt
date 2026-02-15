@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS = {
     warning: '#f59e0b',
     danger: '#ef4444',
   },
+  launchAtLogin: false,
 } as const;
 
 export const SNAPSHOT_FILES = {

@@ -124,6 +124,7 @@ export interface Settings {
   };
   transparentWhenInactive: boolean;
   backgroundOpacity: number; // 0-100
+  launchAtLogin: boolean;
 }
 
 export interface StatusThresholds {

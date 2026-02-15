@@ -26,6 +26,7 @@ export function App() {
     window.electronAPI?.getAttachState?.().then(setAttachState).catch(() => {});
     const cleanup = window.electronAPI?.onAttachStateChanged?.((state: AttachState) => {
       setAttachState(state);
+      if (state.attached) setSettingsOpen(false);
     });
     return cleanup;
   }, []);

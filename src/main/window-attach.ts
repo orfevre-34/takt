@@ -143,6 +143,24 @@ export function getUserOffset(): { x: number; y: number } {
   return { x: userOffsetX, y: userOffsetY };
 }
 
+export function resetLayout(): void {
+  userOffsetX = 0;
+  userOffsetY = 0;
+  savedMiniHeight = MINI_DEFAULT_HEIGHT;
+  savedMiniWidth = 0;
+
+  if (isAttached && mainWindowRef && !mainWindowRef.isDestroyed()) {
+    mainWindowRef.setMinimumSize(100, MINI_MIN_HEIGHT);
+    mainWindowRef.setMaximumSize(2000, MINI_MAX_HEIGHT);
+    mainWindowRef.setContentSize(200, MINI_DEFAULT_HEIGHT);
+    if (targetHwnd) {
+      const bounds = getAccurateWindowBounds(targetHwnd);
+      if (bounds) updatePosition(bounds);
+    }
+  }
+  log('resetLayout: offsets and mini size cleared');
+}
+
 export function setMiniWidth(width: number): void {
   if (!isAttached || !mainWindowRef || mainWindowRef.isDestroyed()) return;
   // ユーザーリサイズ中はキューに入れて後で適用

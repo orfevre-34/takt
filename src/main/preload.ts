@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAttachOffset: (ox: number, oy: number) => ipcRenderer.invoke('set-attach-offset', ox, oy),
   getAttachOffset: () => ipcRenderer.invoke('get-attach-offset'),
   getAttachState: () => ipcRenderer.invoke('get-attach-state'),
+  resetAttachLayout: () => ipcRenderer.invoke('reset-attach-layout'),
   onAttachStateChanged: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown) => callback(state);
     ipcRenderer.on('attach-state-changed', handler);

@@ -213,6 +213,7 @@ export interface ElectronAPI {
   setAttachOffset: (ox: number, oy: number) => Promise<void>;
   getAttachOffset: () => Promise<{ x: number; y: number }>;
   getAttachState: () => Promise<AttachState>;
+  resetAttachLayout: () => Promise<void>;
   onAttachStateChanged: (callback: (state: AttachState) => void) => () => void;
   onOpenAttachSettings: (callback: () => void) => () => void;
   onContentResized: (callback: (width: number, height: number) => void) => () => void;

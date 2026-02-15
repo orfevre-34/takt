@@ -25,6 +25,7 @@ import {
   isAllowedResizeEdge,
   beginUserResize,
   endUserResize,
+  resetLayout,
 } from './window-attach';
 
 let mainWindow: BrowserWindow | null = null;
@@ -434,6 +435,10 @@ function setupIPC(): void {
   ipcMain.handle('set-attach-offset', (_event, ox: number, oy: number) => setUserOffset(ox, oy));
   ipcMain.handle('get-attach-offset', () => getUserOffset());
   ipcMain.handle('get-attach-state', () => getAttachState());
+  ipcMain.handle('reset-attach-layout', () => {
+    resetLayout();
+    saveMiniSizeToSettings(200, 40);
+  });
 }
 
 app.whenReady().then(() => {

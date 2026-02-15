@@ -327,15 +327,26 @@ export function SettingsPanel({ settings, onSave, onClose }: SettingsPanelProps)
               </button>
             )}
             {windowAttach.enabled && windowAttach.targetProcessName && (
-              <button
-                onClick={async () => {
-                  update('windowAttach', { ...windowAttach, enabled: false, targetProcessName: '', targetPath: '' });
-                  await window.electronAPI?.clearAttachTarget?.();
-                }}
-                className="w-full bg-red-700/30 hover:bg-red-700/50 text-red-300 text-xs font-medium py-1.5 rounded border border-red-700/40 transition-colors"
-              >
-                Disable
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={async () => {
+                    update('windowAttach', { ...windowAttach, offsetX: 0, offsetY: 0, miniHeight: 48 });
+                    await window.electronAPI?.resetAttachLayout?.();
+                  }}
+                  className="flex-1 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-300 text-xs font-medium py-1.5 rounded border border-zinc-600/40 transition-colors"
+                >
+                  Reset Layout
+                </button>
+                <button
+                  onClick={async () => {
+                    update('windowAttach', { ...windowAttach, enabled: false, targetProcessName: '', targetPath: '' });
+                    await window.electronAPI?.clearAttachTarget?.();
+                  }}
+                  className="flex-1 bg-red-700/30 hover:bg-red-700/50 text-red-300 text-xs font-medium py-1.5 rounded border border-red-700/40 transition-colors"
+                >
+                  Disable
+                </button>
+              </div>
             )}
           </div>
 

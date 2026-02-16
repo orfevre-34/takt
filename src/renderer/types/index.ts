@@ -186,7 +186,7 @@ export interface ElectronAPI {
   runCcusage: (provider: UsageProvider) => Promise<CCUsageRawOutput | null>;
   openLogin: (provider: UsageProvider) => Promise<{ ok: boolean; snapshot?: UsageSnapshot; error?: string }>;
   setAlwaysOnTop: (value: boolean) => Promise<void>;
-  resizeToContent: (width: number | null, height: number, lockHeight?: boolean) => void;
+  resizeToContent: (width: number | null, height: number) => void;
   getUsageSnapshot: (provider: UsageProvider) => Promise<UsageSnapshot | null>;
   saveUsageSnapshot: (snapshot: UsageSnapshot) => Promise<void>;
   appQuit: () => void;

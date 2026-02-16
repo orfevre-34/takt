@@ -1,4 +1,5 @@
 import koffi from 'koffi';
+import { log } from './logger';
 
 if (process.platform !== 'win32') {
   throw new Error('win32.ts is only supported on Windows');
@@ -58,10 +59,21 @@ const GetWindowLongW_fn = user32.func(
   'int32 __stdcall GetWindowLongW(int64 hwnd, int32 nIndex)',
 );
 
+const SetWindowPos_fn = user32.func(
+  'bool __stdcall SetWindowPos(int64 hwnd, int64 hWndInsertAfter, int32 X, int32 Y, int32 cx, int32 cy, uint32 uFlags)',
+);
+
+const SWP_NOSIZE = 0x0001;
+const SWP_NOMOVE = 0x0002;
+const SWP_NOACTIVATE = 0x0010;
+const HWND_TOPMOST = -1;
+const HWND_NOTOPMOST = -2;
+
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 const EVENT_OBJECT_LOCATIONCHANGE = 0x800b;
 const EVENT_OBJECT_SHOW = 0x8002;
 const EVENT_OBJECT_HIDE = 0x8003;
+const EVENT_SYSTEM_FOREGROUND = 0x0003;
 const WINEVENT_OUTOFCONTEXT = 0x0000;
 const WINEVENT_SKIPOWNPROCESS = 0x0002;
 const OBJID_WINDOW = 0;
@@ -121,6 +133,50 @@ export function isAppWindow(hwnd: number): boolean {
   return true;
 }
 
+export function setTopmost(hwnd: number): void {
+  const ok = SetWindowPos_fn(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok) log('SetWindowPos(TOPMOST) failed for hwnd:', hwnd);
+}
+
+export function clearTopmostBelow(hwnd: number, fgHwnd: number): void {
+  const ok1 = SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok1) log('SetWindowPos(NOTOPMOST) failed for hwnd:', hwnd);
+  const ok2 = SetWindowPos_fn(hwnd, fgHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok2) log('SetWindowPos(below fg) failed for hwnd:', hwnd, 'fg:', fgHwnd);
+}
+
+export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => void): () => void {
+  const callback = koffi.register(
+    (
+      _hook: number,
+      _event: number,
+      hwnd: number,
+    ) => {
+      if (hwnd) onForegroundChanged(hwnd);
+    },
+    koffi.pointer(WinEventProcProto),
+  );
+
+  const hook = SetWinEventHook(
+    EVENT_SYSTEM_FOREGROUND,
+    EVENT_SYSTEM_FOREGROUND,
+    0,
+    callback,
+    0,
+    0,
+    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+  );
+  if (!hook) log('SetWinEventHook(FOREGROUND) failed');
+
+  let cleaned = false;
+  return () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (hook) UnhookWinEvent(hook);
+    koffi.unregister(callback);
+  };
+}
+
 export function watchWindowPosition(
   targetHwnd: number,
   onMove: (bounds: WindowBounds) => void,
@@ -168,6 +224,7 @@ export function watchWindowPosition(
     0,
     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
   );
+  if (!hook) log('SetWinEventHook(LOCATIONCHANGE) failed for pid:', targetPid);
 
   const hookShowHide = SetWinEventHook(
     EVENT_OBJECT_SHOW,
@@ -178,6 +235,7 @@ export function watchWindowPosition(
     0,
     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
   );
+  if (!hookShowHide) log('SetWinEventHook(SHOW/HIDE) failed for pid:', targetPid);
 
   let cleaned = false;
   return () => {

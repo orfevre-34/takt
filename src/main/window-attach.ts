@@ -82,7 +82,6 @@ let miniWidthResizeSuppressUntil = 0;
 let userResizing = false;
 let pendingMiniWidth: number | null = null;
 let repositionTimer: ReturnType<typeof setTimeout> | null = null;
-let reattachTimer: ReturnType<typeof setTimeout> | null = null;
 let attachNativeHwnd: number | null = null;
 let attachCreatedAt = 0;
 
@@ -235,10 +234,11 @@ export function setMiniWidth(width: number): void {
   }
   const w = Math.max(40, Math.ceil(width));
 
-  // Grace period: don't shrink below saved width right after creation
   const GRACE_MS = 2000;
-  if (Date.now() - attachCreatedAt < GRACE_MS && savedMiniWidth > 0 && w < savedMiniWidth) {
-    log('setMiniWidth: grace period, ignoring shrink w=', w, '< savedW=', savedMiniWidth);
+  const elapsed = Date.now() - attachCreatedAt;
+  if (elapsed < GRACE_MS && savedMiniWidth > 0 && w < savedMiniWidth) {
+    log('setMiniWidth: grace period, deferring shrink w=', w, '< savedW=', savedMiniWidth);
+    setTimeout(() => setMiniWidth(w), GRACE_MS - elapsed + 50);
     return;
   }
   const [curW, curH] = attachWin.getContentSize();
@@ -344,7 +344,6 @@ function stopAll(): void {
   if (unwatchPosition) { unwatchPosition(); unwatchPosition = null; }
   if (unwatchForeground) { unwatchForeground(); unwatchForeground = null; }
   if (repositionTimer) { clearTimeout(repositionTimer); repositionTimer = null; }
-  if (reattachTimer) { clearTimeout(reattachTimer); reattachTimer = null; }
   userResizing = false;
   pendingMiniWidth = null;
 }
@@ -387,13 +386,13 @@ function findTargetHwnd(): { hwnd: number; info: WindowInfo } | null {
 function doAttach(hwnd: number, processId: number, title: string, path: string): void {
   if (!callbacks) return;
 
+  const bounds = getAccurateWindowBounds(hwnd);
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
+
   targetHwnd = hwnd;
   targetInfo = { processId, title, path };
   isAttached = true;
   wasHiddenByMinimize = false;
-
-  const bounds = getAccurateWindowBounds(hwnd);
-  if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
 
   const attachWin = callbacks.createAttachWindow();
   attachCreatedAt = Date.now();
@@ -409,7 +408,10 @@ function doAttach(hwnd: number, processId: number, title: string, path: string):
   attachWin.showInactive();
 
   // Get native HWND for Z-order management
-  attachNativeHwnd = attachWin.getNativeWindowHandle().readInt32LE(0);
+  const hwndBuf = attachWin.getNativeWindowHandle();
+  attachNativeHwnd = hwndBuf.byteLength >= 8
+    ? Number(hwndBuf.readBigInt64LE(0))
+    : hwndBuf.readInt32LE(0);
   setTopmost(attachNativeHwnd);
 
   resizeHandler = () => {
@@ -456,7 +458,7 @@ function doAttach(hwnd: number, processId: number, title: string, path: string):
 
       // Check if it's a different window of the same process
       if (fgHwnd !== targetHwnd && fgPid === targetPid) {
-        const fgMatch = findHwndByProcessName(configuredTargetProcessName);
+        const fgMatch = findHwndByProcessName(configuredTargetProcessName, fgHwnd);
         if (fgMatch && fgMatch.hwnd !== targetHwnd) {
           switchAttachTarget(fgMatch.hwnd, fgMatch.processId, fgMatch.title, fgMatch.path);
         }
@@ -497,13 +499,13 @@ function tryAutoAttach(): void {
   doAttach(hwnd, info.processId, title, info.path || '');
 }
 
-function findHwndByProcessName(processName: string): { hwnd: number; processId: number; title: string; path: string } | null {
+function findHwndByProcessName(processName: string, fgHwnd?: number): { hwnd: number; processId: number; title: string; path: string } | null {
   try {
     const windows: WindowInfo[] = windowManager.getWindows();
-    const fgHwnd = getForegroundWindow();
+    const fg = fgHwnd ?? getForegroundWindow();
     for (const win of windows) {
       try {
-        if (win.id !== fgHwnd) continue;
+        if (win.id !== fg) continue;
         if (getProcessName(win.path) !== processName) continue;
         if (!isAppWindow(win.id)) continue;
         if (isMinimized(win.id)) continue;

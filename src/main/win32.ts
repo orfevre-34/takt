@@ -1,4 +1,5 @@
 import koffi from 'koffi';
+import { log } from './logger';
 
 if (process.platform !== 'win32') {
   throw new Error('win32.ts is only supported on Windows');
@@ -133,12 +134,15 @@ export function isAppWindow(hwnd: number): boolean {
 }
 
 export function setTopmost(hwnd: number): void {
-  SetWindowPos_fn(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  const ok = SetWindowPos_fn(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok) log('SetWindowPos(TOPMOST) failed for hwnd:', hwnd);
 }
 
 export function clearTopmostBelow(hwnd: number, fgHwnd: number): void {
-  SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-  SetWindowPos_fn(hwnd, fgHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  const ok1 = SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok1) log('SetWindowPos(NOTOPMOST) failed for hwnd:', hwnd);
+  const ok2 = SetWindowPos_fn(hwnd, fgHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok2) log('SetWindowPos(below fg) failed for hwnd:', hwnd, 'fg:', fgHwnd);
 }
 
 export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => void): () => void {
@@ -162,6 +166,7 @@ export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => 
     0,
     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
   );
+  if (!hook) log('SetWinEventHook(FOREGROUND) failed');
 
   let cleaned = false;
   return () => {
@@ -219,6 +224,7 @@ export function watchWindowPosition(
     0,
     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
   );
+  if (!hook) log('SetWinEventHook(LOCATIONCHANGE) failed for pid:', targetPid);
 
   const hookShowHide = SetWinEventHook(
     EVENT_OBJECT_SHOW,
@@ -229,6 +235,7 @@ export function watchWindowPosition(
     0,
     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
   );
+  if (!hookShowHide) log('SetWinEventHook(SHOW/HIDE) failed for pid:', targetPid);
 
   let cleaned = false;
   return () => {

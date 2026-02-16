@@ -191,7 +191,7 @@ function createAttachWindow(): BrowserWindow {
     attachWindow.destroy();
   }
 
-  attachWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 200,
     height: 40,
     frame: false,
@@ -208,31 +208,30 @@ function createAttachWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  attachWindow = win;
 
   const url = process.env.NODE_ENV === 'development'
     ? 'http://localhost:5173?mode=mini'
     : `file://${path.join(__dirname, '../renderer/index.html')}?mode=mini`;
-  attachWindow.loadURL(url);
+  win.loadURL(url);
 
-  // Send initial content size after page loads so MiniView starts with correct dimensions
-  attachWindow.webContents.once('did-finish-load', () => {
-    if (!attachWindow || attachWindow.isDestroyed()) return;
-    const h = attachWindow.getContentSize()[1] ?? 0;
+  win.webContents.once('did-finish-load', () => {
+    if (win.isDestroyed()) return;
+    const h = win.getContentSize()[1] ?? 0;
     log('attachWindow did-finish-load: sending content-resized h=', h);
-    attachWindow.webContents.send('content-resized', 0, h);
+    win.webContents.send('content-resized', 0, h);
   });
 
-  // Ctrl+resize support for attach window
   let isCtrlPressed = false;
-  attachWindow.webContents.on('before-input-event', (_event, input) => {
+  win.webContents.on('before-input-event', (_event, input) => {
     if (input.key === 'Control') {
       isCtrlPressed = input.type === 'keyDown';
       return;
     }
     isCtrlPressed = !!input.control;
   });
-  attachWindow.on('blur', () => { isCtrlPressed = false; });
-  attachWindow.on('will-resize', (event, _newBounds, details) => {
+  win.on('blur', () => { isCtrlPressed = false; });
+  win.on('will-resize', (event, _newBounds, details) => {
     if (!isCtrlPressed) {
       event.preventDefault();
       return;
@@ -246,32 +245,36 @@ function createAttachWindow(): BrowserWindow {
 
   let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
   let lastSentMiniH = 0;
-  attachWindow.on('resize', () => {
-    if (!attachWindow || attachWindow.isDestroyed()) return;
-    const h = attachWindow.getContentSize()[1] ?? 0;
+  win.on('resize', () => {
+    if (win.isDestroyed()) return;
+    const h = win.getContentSize()[1] ?? 0;
     if (h !== lastSentMiniH) {
       lastSentMiniH = h;
-      attachWindow.webContents.send('content-resized', 0, h);
+      win.webContents.send('content-resized', 0, h);
     }
     if (isMiniWidthResizeSuppressed()) return;
     clearTimeout(saveMiniTimer);
     saveMiniTimer = setTimeout(() => {
-      if (!attachWindow || attachWindow.isDestroyed()) return;
+      if (win.isDestroyed()) return;
       if (!isWindowAttached()) return;
-      const cs = attachWindow.getContentSize();
+      const cs = win.getContentSize();
       saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
     }, 350);
   });
 
-  attachWindow.on('resized', () => {
+  win.on('resized', () => {
     endUserResize();
   });
 
-  attachWindow.on('closed', () => {
-    attachWindow = null;
+  win.on('closed', () => {
+    clearTimeout(saveMiniTimer);
+    if (attachWindow === win) attachWindow = null;
+    if (isWindowAttached()) {
+      detachWindow();
+    }
   });
 
-  return attachWindow;
+  return win;
 }
 
 function destroyAttachWindow(): void {
@@ -449,6 +452,7 @@ function setupIPC(): void {
       return { ok: false, error: err.message || String(err) };
     }
   });
+  let lastContentW = 0;
   ipcMain.on('resize-to-content', (event, width: unknown, height: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
     const senderWin = BrowserWindow.fromWebContents(event.sender);
@@ -459,11 +463,15 @@ function setupIPC(): void {
       const contentW = Math.max(380, Math.ceil(width));
       mainWindow.setMinimumSize(contentW, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
-      mainWindow.setContentSize(curW < contentW ? contentW : curW, newHeight);
+      // Shrink when content itself shrinks, but allow user expansion
+      const targetW = contentW < lastContentW ? contentW : Math.max(contentW, curW);
+      lastContentW = contentW;
+      mainWindow.setContentSize(targetW, newHeight);
     } else {
+      lastContentW = 0;
       mainWindow.setMinimumSize(380, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
-      mainWindow.setContentSize(curW, newHeight);
+      mainWindow.setContentSize(Math.max(380, curW), newHeight);
     }
   });
   ipcMain.on('app-quit', () => app.quit());

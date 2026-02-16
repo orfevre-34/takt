@@ -116,11 +116,6 @@ export function App() {
     return () => observer.disconnect();
   }, [resizeToFit]);
 
-  const prevLayoutRef = useRef(settings.layout);
-  useEffect(() => {
-    prevLayoutRef.current = settings.layout;
-  }, [settings.layout]);
-
   if (isMiniMode) {
     return (
       <>

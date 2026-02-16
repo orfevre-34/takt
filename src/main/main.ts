@@ -379,42 +379,58 @@ function setupIPC(): void {
     mainWindow?.setAlwaysOnTop(value, 'normal');
     rebuildTrayMenu();
   });
+  const ccusageInFlight = new Map<string, Promise<unknown>>();
   ipcMain.handle('run-ccusage', async (_event, provider: string) => {
-    const settings = loadSettings() as any;
-    const npxPath = settings?.cliPaths?.npx || 'npx';
-    const ccSettings = provider === 'claude' ? settings?.ccusage?.claude : settings?.ccusage?.codex;
-    const additionalArgs: string = ccSettings?.additionalArgs || '';
-
-    const pkg = provider === 'claude' ? 'ccusage@latest' : '@ccusage/codex@latest';
-    const now = new Date();
-    const startOfMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}01`;
-
-    const args = ['-y', pkg, 'daily', '-s', startOfMonth, '-j'];
-    if (additionalArgs) {
-      args.push(...parseCliArgs(additionalArgs));
+    const existing = ccusageInFlight.get(provider);
+    if (existing) {
+      log('run-ccusage: dedup, reusing in-flight request for', provider);
+      return existing;
     }
 
-    log('run-ccusage:', npxPath, args.join(' '));
-    const { execFile } = require('child_process');
-    return new Promise((resolve) => {
-      execFile(npxPath, args, { timeout: 60000, shell: process.platform === 'win32', env: { ...process.env } }, (error: any, stdout: string, stderr: string) => {
-        if (error) {
-          log('ccusage error:', error.message, stderr);
-          resolve(null);
-          return;
-        }
-        try {
-          const data = JSON.parse(stdout);
-          const filename = provider === 'claude' ? 'token_usage_claude.json' : 'token_usage_codex.json';
-          saveSnapshot(filename, { provider, fetchedAt: new Date().toISOString(), raw: data });
-          log('ccusage success:', provider, 'daily entries:', data.daily?.length ?? 0);
-          resolve(data);
-        } catch {
-          log('ccusage parse error:', stdout.substring(0, 500));
-          resolve(null);
-        }
+    const run = (async () => {
+      const settings = loadSettings() as any;
+      const npxPath = settings?.cliPaths?.npx || 'npx';
+      const ccSettings = provider === 'claude' ? settings?.ccusage?.claude : settings?.ccusage?.codex;
+      const additionalArgs: string = ccSettings?.additionalArgs || '';
+
+      const pkg = provider === 'claude' ? 'ccusage@latest' : '@ccusage/codex@latest';
+      const now = new Date();
+      const startOfMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}01`;
+
+      const args = ['-y', pkg, 'daily', '-s', startOfMonth, '-j'];
+      if (additionalArgs) {
+        args.push(...parseCliArgs(additionalArgs));
+      }
+
+      log('run-ccusage:', npxPath, args.join(' '));
+      const { execFile } = require('child_process');
+      return new Promise((resolve) => {
+        execFile(npxPath, args, { timeout: 60000, shell: process.platform === 'win32', env: { ...process.env } }, (error: any, stdout: string, stderr: string) => {
+          if (error) {
+            log('ccusage error:', error.message, stderr);
+            resolve(null);
+            return;
+          }
+          try {
+            const data = JSON.parse(stdout);
+            const filename = provider === 'claude' ? 'token_usage_claude.json' : 'token_usage_codex.json';
+            saveSnapshot(filename, { provider, fetchedAt: new Date().toISOString(), raw: data });
+            log('ccusage success:', provider, 'daily entries:', data.daily?.length ?? 0);
+            resolve(data);
+          } catch {
+            log('ccusage parse error:', stdout.substring(0, 500));
+            resolve(null);
+          }
+        });
       });
-    });
+    })();
+
+    ccusageInFlight.set(provider, run);
+    try {
+      return await run;
+    } finally {
+      ccusageInFlight.delete(provider);
+    }
   });
   ipcMain.handle('open-login', async (_event, provider: string) => {
     const closed = await openLoginWindow(provider);

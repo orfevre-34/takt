@@ -42,7 +42,6 @@ export function App() {
   }, [setSettingsOpen]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (attachState.attached) return;
     if ((e.target as HTMLElement).closest('button, input, [data-no-drag]')) return;
     setIsDragging(true);
     setDragStart({
@@ -95,34 +94,30 @@ export function App() {
 
   const isHorizontal = settings.layout === 'horizontal' && showClaude && showCodex;
 
-  // コンテンツに合わせてウィンドウをリサイズ
   const resizeToFit = useCallback(() => {
     if (!containerRef.current) return;
     const height = containerRef.current.scrollHeight;
-    // 横並び時: contentRef の自然幅 + padding(p-3 = 12px*2) で幅も自動調整
-    const width = isHorizontal && contentRef.current
-      ? contentRef.current.offsetWidth + 24
-      : null;
-    window.electronAPI?.resizeToContent(width, height, !isHorizontal);
+    let width: number | null = null;
+    if (isHorizontal && contentRef.current) {
+      const el = contentRef.current;
+      el.style.width = 'max-content';
+      width = el.scrollWidth + 24;
+      el.style.width = '';
+    }
+    window.electronAPI?.resizeToContent(width, height);
   }, [isHorizontal]);
 
   useEffect(() => {
-    if (attachState.attached) return;
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => resizeToFit());
     observer.observe(el);
     resizeToFit();
     return () => observer.disconnect();
-  }, [resizeToFit, attachState.attached]);
+  }, [resizeToFit]);
 
-  // 横→縦切替時にウィンドウ幅をデフォルトにリセット
   const prevLayoutRef = useRef(settings.layout);
   useEffect(() => {
-    if (prevLayoutRef.current === 'horizontal' && settings.layout !== 'horizontal') {
-      const height = containerRef.current?.scrollHeight ?? 300;
-      window.electronAPI?.resizeToContent(480, height, true);
-    }
     prevLayoutRef.current = settings.layout;
   }, [settings.layout]);
 
@@ -204,7 +199,7 @@ export function App() {
           </div>
         )}
 
-        <div ref={contentRef} className={isHorizontal ? 'flex flex-row gap-3 w-max' : 'space-y-3'}>
+        <div ref={contentRef} className={isHorizontal ? 'flex flex-row gap-3' : 'space-y-3'}>
         {/* Claude Code セクション */}
         {showClaude && (
           <ProviderSection
@@ -239,7 +234,7 @@ export function App() {
             showBg={showBg}
             backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => window.electronAPI?.openLogin?.('claude')}
-            className={isHorizontal ? 'flex-shrink-0' : undefined}
+            className={isHorizontal ? 'flex-1 min-w-0' : undefined}
             thresholds={settings.thresholds.claude}
           />
         )}
@@ -277,7 +272,7 @@ export function App() {
             showBg={showBg}
             backgroundOpacity={settings.backgroundOpacity}
             onLogin={() => window.electronAPI?.openLogin?.('codex')}
-            className={isHorizontal ? 'flex-shrink-0' : undefined}
+            className={isHorizontal ? 'flex-1 min-w-0' : undefined}
             thresholds={settings.thresholds.codex}
           />
         )}

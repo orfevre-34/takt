@@ -449,20 +449,21 @@ function setupIPC(): void {
       return { ok: false, error: err.message || String(err) };
     }
   });
-  ipcMain.on('resize-to-content', (event, width: unknown, height: unknown, lockHeight: unknown) => {
+  ipcMain.on('resize-to-content', (event, width: unknown, height: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
-    // Only main window responds to resize-to-content
     const senderWin = BrowserWindow.fromWebContents(event.sender);
     if (senderWin !== mainWindow) return;
-    const newWidth = typeof width === 'number' ? Math.max(380, Math.ceil(width)) : (mainWindow.getSize()[0] ?? 480);
     const newHeight = Math.max(150, Math.min(Math.ceil(height), 900));
-    mainWindow.setContentSize(newWidth, newHeight);
-    if (lockHeight) {
-      mainWindow.setMinimumSize(mainWindow.getMinimumSize()[0] ?? 380, newHeight);
+    const curW = mainWindow.getContentSize()[0] ?? 480;
+    if (typeof width === 'number') {
+      const contentW = Math.max(380, Math.ceil(width));
+      mainWindow.setMinimumSize(contentW, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
+      mainWindow.setContentSize(curW < contentW ? contentW : curW, newHeight);
     } else {
-      mainWindow.setMinimumSize(380, 150);
-      mainWindow.setMaximumSize(10000, 10000);
+      mainWindow.setMinimumSize(380, newHeight);
+      mainWindow.setMaximumSize(10000, newHeight);
+      mainWindow.setContentSize(curW, newHeight);
     }
   });
   ipcMain.on('app-quit', () => app.quit());

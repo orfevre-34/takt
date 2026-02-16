@@ -237,8 +237,7 @@ export function setMiniWidth(width: number): void {
   const GRACE_MS = 2000;
   const elapsed = Date.now() - attachCreatedAt;
   if (elapsed < GRACE_MS && savedMiniWidth > 0 && w < savedMiniWidth) {
-    log('setMiniWidth: grace period, deferring shrink w=', w, '< savedW=', savedMiniWidth);
-    setTimeout(() => setMiniWidth(w), GRACE_MS - elapsed + 50);
+    log('setMiniWidth: grace period, ignoring shrink w=', w, '< savedW=', savedMiniWidth);
     return;
   }
   const [curW, curH] = attachWin.getContentSize();

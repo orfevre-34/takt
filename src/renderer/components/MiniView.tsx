@@ -91,7 +91,7 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
       lastReportedWidth.current = w;
       window.electronAPI?.setMiniWidth?.(w);
     }
-  }, [donutSize, showClaude, showCodex, contentH]);
+  });
 
   return (
     <div

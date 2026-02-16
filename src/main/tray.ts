@@ -4,6 +4,7 @@ import { getAttachState, detach as detachWindow } from './window-attach';
 
 let tray: Tray | null = null;
 let mainWindowRef: BrowserWindow | null = null;
+let getAttachWindowRef: (() => BrowserWindow | null) | null = null;
 
 function getIconPath(filename: string): string {
   if (app.isPackaged) {
@@ -42,8 +43,13 @@ function buildContextMenu(): Menu {
     {
       label: 'Refresh Now',
       click: () => {
-        if (!isWindowAlive(mainWindow)) return;
-        mainWindow.webContents.send('trigger-refresh');
+        if (isWindowAlive(mainWindow)) {
+          mainWindow.webContents.send('trigger-refresh');
+        }
+        const attachWin = getAttachWindowRef?.();
+        if (attachWin && isWindowAlive(attachWin)) {
+          attachWin.webContents.send('trigger-refresh');
+        }
       },
     },
     { type: 'separator' },
@@ -87,8 +93,9 @@ function buildContextMenu(): Menu {
   ]);
 }
 
-export function createTray(mainWindow: BrowserWindow): void {
+export function createTray(mainWindow: BrowserWindow, getAttachWindow?: () => BrowserWindow | null): void {
   mainWindowRef = mainWindow;
+  getAttachWindowRef = getAttachWindow ?? null;
   const iconPath = getIconPath('icon.ico');
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
@@ -143,4 +150,5 @@ export function destroyTray(): void {
   tray?.destroy();
   tray = null;
   mainWindowRef = null;
+  getAttachWindowRef = null;
 }

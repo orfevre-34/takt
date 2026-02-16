@@ -10,6 +10,8 @@ import { getStatusColor } from './utils/colors';
 import { formatTimeRemaining } from './utils/format';
 import type { AttachState } from './types';
 
+const isMiniMode = new URLSearchParams(window.location.search).get('mode') === 'mini';
+
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -124,8 +126,7 @@ export function App() {
     prevLayoutRef.current = settings.layout;
   }, [settings.layout]);
 
-  // アタッチモード: MiniView を表示
-  if (attachState.attached) {
+  if (isMiniMode) {
     return (
       <>
         <MiniView

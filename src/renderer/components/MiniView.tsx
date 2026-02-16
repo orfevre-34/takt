@@ -62,13 +62,18 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
     };
   }, [dragging, dragStart, onOffsetChange]);
 
-  // main プロセスからコンテンツ高さを受信
-  const [contentH, setContentH] = useState(initialHeight ?? 48);
+  // ウィンドウ高さを追跡（初期値は実際のウィンドウ高さ）
+  const [contentH, setContentH] = useState(() => window.innerHeight || initialHeight || 48);
   useEffect(() => {
+    const handleResize = () => setContentH(window.innerHeight);
+    window.addEventListener('resize', handleResize);
     const cleanup = window.electronAPI?.onContentResized?.((_, h) => {
       setContentH(h);
     });
-    return cleanup;
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cleanup?.();
+    };
   }, []);
 
   // 高さからすべてのサイズを算出（クランプなし — ウィンドウ制約でバウンド）

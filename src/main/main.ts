@@ -21,7 +21,6 @@ import {
   getAttachState,
   isWindowAttached,
   cleanupWindowAttach,
-  computeAttachedBounds,
   isAllowedResizeEdge,
   beginUserResize,
   endUserResize,
@@ -50,6 +49,7 @@ function parseCliArgs(str: string): string[] {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let attachWindow: BrowserWindow | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 
@@ -118,6 +118,7 @@ const MINI_SAVE_MAX_WIDTH = 2000;
 const MINI_SAVE_MAX_HEIGHT = 150;
 
 function saveMiniSizeToSettings(width: number, height: number): void {
+  log('saveMiniSizeToSettings: called w=', width, 'h=', height);
   const current = loadSettings();
   const currentWindowAttach = (current.windowAttach && typeof current.windowAttach === 'object')
     ? current.windowAttach as Record<string, unknown>
@@ -129,7 +130,11 @@ function saveMiniSizeToSettings(width: number, height: number): void {
   if (Number.isFinite(width) && width > 0 && width <= MINI_SAVE_MAX_WIDTH) {
     patch.miniWidth = Math.ceil(width);
   }
-  if (Object.keys(patch).length === 0) return;
+  if (Object.keys(patch).length === 0) {
+    log('saveMiniSizeToSettings: nothing to save (filtered out)');
+    return;
+  }
+  log('saveMiniSizeToSettings: writing patch=', JSON.stringify(patch));
   saveSettings({
     ...current,
     windowAttach: {
@@ -163,7 +168,6 @@ function isVisibleOnAnyDisplay(bounds: WindowBounds): boolean {
   const displays = screen.getAllDisplays();
   return displays.some((d) => {
     const { x, y, width, height } = d.workArea;
-    // ウィンドウの少なくとも一部(100px)が画面内に収まっているか
     return (
       bounds.x + bounds.width > x + 100 &&
       bounds.x < x + width - 100 &&
@@ -171,6 +175,110 @@ function isVisibleOnAnyDisplay(bounds: WindowBounds): boolean {
       bounds.y + bounds.height > y + 100
     );
   });
+}
+
+function broadcastToAll(channel: string, ...args: unknown[]): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+  if (attachWindow && !attachWindow.isDestroyed()) {
+    attachWindow.webContents.send(channel, ...args);
+  }
+}
+
+function createAttachWindow(): BrowserWindow {
+  if (attachWindow && !attachWindow.isDestroyed()) {
+    attachWindow.destroy();
+  }
+
+  attachWindow = new BrowserWindow({
+    width: 200,
+    height: 40,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    skipTaskbar: true,
+    resizable: true,
+    alwaysOnTop: false,
+    show: false,
+    useContentSize: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  const url = process.env.NODE_ENV === 'development'
+    ? 'http://localhost:5173?mode=mini'
+    : `file://${path.join(__dirname, '../renderer/index.html')}?mode=mini`;
+  attachWindow.loadURL(url);
+
+  // Send initial content size after page loads so MiniView starts with correct dimensions
+  attachWindow.webContents.once('did-finish-load', () => {
+    if (!attachWindow || attachWindow.isDestroyed()) return;
+    const h = attachWindow.getContentSize()[1] ?? 0;
+    log('attachWindow did-finish-load: sending content-resized h=', h);
+    attachWindow.webContents.send('content-resized', 0, h);
+  });
+
+  // Ctrl+resize support for attach window
+  let isCtrlPressed = false;
+  attachWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'Control') {
+      isCtrlPressed = input.type === 'keyDown';
+      return;
+    }
+    isCtrlPressed = !!input.control;
+  });
+  attachWindow.on('blur', () => { isCtrlPressed = false; });
+  attachWindow.on('will-resize', (event, _newBounds, details) => {
+    if (!isCtrlPressed) {
+      event.preventDefault();
+      return;
+    }
+    if (!isAllowedResizeEdge((details as any).edge)) {
+      event.preventDefault();
+      return;
+    }
+    beginUserResize();
+  });
+
+  let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastSentMiniH = 0;
+  attachWindow.on('resize', () => {
+    if (!attachWindow || attachWindow.isDestroyed()) return;
+    const h = attachWindow.getContentSize()[1] ?? 0;
+    if (h !== lastSentMiniH) {
+      lastSentMiniH = h;
+      attachWindow.webContents.send('content-resized', 0, h);
+    }
+    if (isMiniWidthResizeSuppressed()) return;
+    clearTimeout(saveMiniTimer);
+    saveMiniTimer = setTimeout(() => {
+      if (!attachWindow || attachWindow.isDestroyed()) return;
+      if (!isWindowAttached()) return;
+      const cs = attachWindow.getContentSize();
+      saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
+    }, 350);
+  });
+
+  attachWindow.on('resized', () => {
+    endUserResize();
+  });
+
+  attachWindow.on('closed', () => {
+    attachWindow = null;
+  });
+
+  return attachWindow;
+}
+
+function destroyAttachWindow(): void {
+  if (attachWindow && !attachWindow.isDestroyed()) {
+    attachWindow.destroy();
+  }
+  attachWindow = null;
 }
 
 function createWindow(): void {
@@ -203,63 +311,21 @@ function createWindow(): void {
     },
   });
 
-  // 'normal' レベルで最前面に保つ（'floating' だとシステムトレイより上になる）
   if (alwaysOnTop) {
     mainWindow.setAlwaysOnTop(true, 'normal');
   }
-
-  let isCtrlPressed = false;
-  mainWindow.webContents.on('before-input-event', (_event, input) => {
-    if (input.key === 'Control') {
-      isCtrlPressed = input.type === 'keyDown';
-      return;
-    }
-    isCtrlPressed = !!input.control;
-  });
-  mainWindow.on('blur', () => {
-    isCtrlPressed = false;
-  });
-  mainWindow.on('will-resize', (event, _newBounds, details) => {
-    if (!isWindowAttached()) return;
-    if (!isCtrlPressed) {
-      event.preventDefault();
-      return;
-    }
-    if (!isAllowedResizeEdge((details as any).edge)) {
-      event.preventDefault();
-      return;
-    }
-    beginUserResize();
-  });
-
-  let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
-  const debounceSaveMiniSize = () => {
-    clearTimeout(saveMiniTimer);
-    saveMiniTimer = setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (!isWindowAttached()) return;
-      const cs = mainWindow.getContentSize();
-      saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
-    }, 350);
-  };
 
   let lastSentH = 0;
   mainWindow.on('resize', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const h = mainWindow.getContentSize()[1] ?? 0;
-    if (isWindowAttached()) {
-      debounceSaveMiniSize();
-    }
-    if (isMiniWidthResizeSuppressed()) return;
     if (h !== lastSentH) {
       lastSentH = h;
       mainWindow.webContents.send('content-resized', 0, h);
     }
   });
 
-  // ウィンドウ位置・サイズ変更時に保存（デバウンス付き）
   const debounceSaveBounds = () => {
-    if (isWindowAttached()) return;
     if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
     saveBoundsTimer = setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
@@ -268,20 +334,11 @@ function createWindow(): void {
     }, 500);
   };
   mainWindow.on('moved', debounceSaveBounds);
-  mainWindow.on('resized', () => {
-    debounceSaveBounds();
-    endUserResize();
-  });
+  mainWindow.on('resized', debounceSaveBounds);
 
-  // 閉じるボタンではトレイに最小化（終了しない）
   mainWindow.on('close', (e) => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-      if (isWindowAttached()) {
-        const cs = mainWindow.getContentSize();
-        saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
-      } else {
-        saveWindowBounds(mainWindow.getBounds());
-      }
+      saveWindowBounds(mainWindow.getBounds());
     }
     if (!isQuitting) {
       e.preventDefault();
@@ -305,7 +362,6 @@ function setupIPC(): void {
   ipcMain.handle('save-settings', (_event, settings: Record<string, unknown>) => {
     const merged = mergeSettings(loadSettings(), settings);
     saveSettings(merged);
-    // Windows起動時の自動起動を設定
     app.setLoginItemSettings({ openAtLogin: !!merged.launchAtLogin });
   });
   ipcMain.handle('get-usage-snapshot', (_event, provider: string) => {
@@ -360,7 +416,6 @@ function setupIPC(): void {
   ipcMain.handle('open-login', async (_event, provider: string) => {
     const closed = await openLoginWindow(provider);
     if (!closed) return { ok: false, error: 'window_already_open' };
-    // ログインウィンドウが閉じたら自動的にフェッチ
     try {
       const result = provider === 'claude'
         ? await fetchClaudeUsage()
@@ -369,7 +424,7 @@ function setupIPC(): void {
       if (r.ok && r.snapshot) {
         const filename = provider === 'claude' ? 'usage_snapshot_claude.json' : 'usage_snapshot.json';
         saveSnapshot(filename, r.snapshot);
-        mainWindow?.webContents.send('usage-updated', r.snapshot);
+        broadcastToAll('usage-updated', r.snapshot);
         return { ok: true, snapshot: r.snapshot };
       }
       return r;
@@ -386,7 +441,7 @@ function setupIPC(): void {
       if (r.ok && r.snapshot) {
         const filename = provider === 'claude' ? 'usage_snapshot_claude.json' : 'usage_snapshot.json';
         saveSnapshot(filename, r.snapshot);
-        mainWindow?.webContents.send('usage-updated', r.snapshot);
+        broadcastToAll('usage-updated', r.snapshot);
         return r.snapshot;
       }
       return r;
@@ -394,9 +449,11 @@ function setupIPC(): void {
       return { ok: false, error: err.message || String(err) };
     }
   });
-  ipcMain.on('resize-to-content', (_event, width: unknown, height: unknown, lockHeight: unknown) => {
+  ipcMain.on('resize-to-content', (event, width: unknown, height: unknown, lockHeight: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
-    if (isWindowAttached()) return;
+    // Only main window responds to resize-to-content
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    if (senderWin !== mainWindow) return;
     const newWidth = typeof width === 'number' ? Math.max(380, Math.ceil(width)) : (mainWindow.getSize()[0] ?? 480);
     const newHeight = Math.max(150, Math.min(Math.ceil(height), 900));
     mainWindow.setContentSize(newWidth, newHeight);
@@ -410,7 +467,7 @@ function setupIPC(): void {
   });
   ipcMain.on('app-quit', () => app.quit());
   ipcMain.on('refresh-now', () => {
-    mainWindow?.webContents.send('trigger-refresh');
+    broadcastToAll('trigger-refresh');
   });
   ipcMain.on('open-external', (_event, url: string) => {
     try {
@@ -420,9 +477,12 @@ function setupIPC(): void {
       }
     } catch { /* invalid URL, ignore */ }
   });
-  ipcMain.on('set-window-opacity', (_event, opacity: unknown) => {
-    if (!mainWindow || typeof opacity !== 'number') return;
-    mainWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
+  ipcMain.on('set-window-opacity', (event, opacity: unknown) => {
+    if (typeof opacity !== 'number') return;
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    if (senderWin && !senderWin.isDestroyed()) {
+      senderWin.setOpacity(Math.max(0, Math.min(1, opacity)));
+    }
   });
   ipcMain.on('set-mini-width', (_event, width: number) => {
     setMiniWidth(width);
@@ -528,10 +588,16 @@ app.whenReady().then(() => {
   log('Takt started. Log file:', getLogPath());
   setupIPC();
   createWindow();
-  initWindowAttach(mainWindow!, () => rebuildTrayMenu());
-  // 設定からウィンドウアタッチを復元
+  initWindowAttach(mainWindow!, {
+    onStateChanged: () => rebuildTrayMenu(),
+    createAttachWindow,
+    destroyAttachWindow,
+    getAttachWindow: () => attachWindow,
+    saveMiniSize: saveMiniSizeToSettings,
+  });
   const savedSettings = loadSettings() as any;
   const wa = savedSettings?.windowAttach;
+  log('startup: windowAttach settings=', JSON.stringify({ enabled: wa?.enabled, targetProcessName: wa?.targetProcessName, miniHeight: wa?.miniHeight, miniWidth: wa?.miniWidth, anchor: wa?.anchor }));
   if (wa?.responsiveness) {
     setResponsiveness(wa.responsiveness);
   }
@@ -539,21 +605,21 @@ app.whenReady().then(() => {
     if (typeof wa.offsetX === 'number' || typeof wa.offsetY === 'number') {
       setUserOffset(wa.offsetX || 0, wa.offsetY || 0);
     }
+    log('startup: calling startAutoAttach with miniHeight=', wa.miniHeight, 'miniWidth=', wa.miniWidth);
     startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight, wa.miniWidth);
   }
-  createTray(mainWindow!);
-  startScheduler(mainWindow!);
+  createTray(mainWindow!, () => attachWindow);
+  startScheduler(broadcastToAll);
 });
 
-// トレイ常駐のため window-all-closed ではアプリを終了しない
 app.on('window-all-closed', () => {
   // no-op: トレイに常駐し続ける
 });
 
 app.on('before-quit', () => {
   isQuitting = true;
-  if (mainWindow && !mainWindow.isDestroyed() && isWindowAttached()) {
-    const cs = mainWindow.getContentSize();
+  if (attachWindow && !attachWindow.isDestroyed() && isWindowAttached()) {
+    const cs = attachWindow.getContentSize();
     saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
   }
   cleanupWindowAttach();

@@ -58,10 +58,21 @@ const GetWindowLongW_fn = user32.func(
   'int32 __stdcall GetWindowLongW(int64 hwnd, int32 nIndex)',
 );
 
+const SetWindowPos_fn = user32.func(
+  'bool __stdcall SetWindowPos(int64 hwnd, int64 hWndInsertAfter, int32 X, int32 Y, int32 cx, int32 cy, uint32 uFlags)',
+);
+
+const SWP_NOSIZE = 0x0001;
+const SWP_NOMOVE = 0x0002;
+const SWP_NOACTIVATE = 0x0010;
+const HWND_TOPMOST = -1;
+const HWND_NOTOPMOST = -2;
+
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 const EVENT_OBJECT_LOCATIONCHANGE = 0x800b;
 const EVENT_OBJECT_SHOW = 0x8002;
 const EVENT_OBJECT_HIDE = 0x8003;
+const EVENT_SYSTEM_FOREGROUND = 0x0003;
 const WINEVENT_OUTOFCONTEXT = 0x0000;
 const WINEVENT_SKIPOWNPROCESS = 0x0002;
 const OBJID_WINDOW = 0;
@@ -119,6 +130,46 @@ export function isAppWindow(hwnd: number): boolean {
   if (exStyle & WS_EX_TOOLWINDOW) return false;
   if (exStyle & WS_EX_NOACTIVATE) return false;
   return true;
+}
+
+export function setTopmost(hwnd: number): void {
+  SetWindowPos_fn(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+}
+
+export function clearTopmostBelow(hwnd: number, fgHwnd: number): void {
+  SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  SetWindowPos_fn(hwnd, fgHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+}
+
+export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => void): () => void {
+  const callback = koffi.register(
+    (
+      _hook: number,
+      _event: number,
+      hwnd: number,
+    ) => {
+      if (hwnd) onForegroundChanged(hwnd);
+    },
+    koffi.pointer(WinEventProcProto),
+  );
+
+  const hook = SetWinEventHook(
+    EVENT_SYSTEM_FOREGROUND,
+    EVENT_SYSTEM_FOREGROUND,
+    0,
+    callback,
+    0,
+    0,
+    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+  );
+
+  let cleaned = false;
+  return () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (hook) UnhookWinEvent(hook);
+    koffi.unregister(callback);
+  };
 }
 
 export function watchWindowPosition(

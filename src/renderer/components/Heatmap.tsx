@@ -15,7 +15,7 @@ interface HeatmapCell {
   weekIndex: number;
 }
 
-export function Heatmap({ dailyUsage, weeks = 5 }: HeatmapProps) {
+export function Heatmap({ dailyUsage, weeks = 6 }: HeatmapProps) {
   const todayISO = getTodayISO();
 
   const { grid, quartiles } = useMemo(() => {

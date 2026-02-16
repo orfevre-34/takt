@@ -394,10 +394,11 @@ function setupIPC(): void {
       const additionalArgs: string = ccSettings?.additionalArgs || '';
 
       const pkg = provider === 'claude' ? 'ccusage@latest' : '@ccusage/codex@latest';
-      const now = new Date();
-      const startOfMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}01`;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 42);
+      const startStr = `${startDate.getFullYear()}${String(startDate.getMonth() + 1).padStart(2, '0')}${String(startDate.getDate()).padStart(2, '0')}`;
 
-      const args = ['-y', pkg, 'daily', '-s', startOfMonth, '-j'];
+      const args = ['-y', pkg, 'daily', '-s', startStr, '-j'];
       if (additionalArgs) {
         args.push(...parseCliArgs(additionalArgs));
       }

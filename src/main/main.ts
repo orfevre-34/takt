@@ -16,16 +16,17 @@ import {
   setAnchor,
   setUserOffset,
   getUserOffset,
-  setMiniWidth,
-  isMiniWidthResizeSuppressed,
+  setMiniWidthForWindow,
+  isMiniWidthResizeSuppressedForWindow,
   getAttachState,
   isWindowAttached,
   cleanupWindowAttach,
   isAllowedResizeEdge,
-  beginUserResize,
-  endUserResize,
+  beginUserResizeForWindow,
+  endUserResizeForWindow,
   resetLayout,
   setResponsiveness,
+  detachOneByWindow,
   type AnchorPosition,
   type AttachResponsiveness,
 } from './window-attach';
@@ -49,7 +50,7 @@ function parseCliArgs(str: string): string[] {
 }
 
 let mainWindow: BrowserWindow | null = null;
-let attachWindow: BrowserWindow | null = null;
+const attachWindows = new Set<BrowserWindow>();
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 
@@ -181,16 +182,14 @@ function broadcastToAll(channel: string, ...args: unknown[]): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, ...args);
   }
-  if (attachWindow && !attachWindow.isDestroyed()) {
-    attachWindow.webContents.send(channel, ...args);
+  for (const win of attachWindows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, ...args);
+    }
   }
 }
 
 function createAttachWindow(): BrowserWindow {
-  if (attachWindow && !attachWindow.isDestroyed()) {
-    attachWindow.destroy();
-  }
-
   const win = new BrowserWindow({
     width: 200,
     height: 40,
@@ -208,7 +207,7 @@ function createAttachWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-  attachWindow = win;
+  attachWindows.add(win);
 
   const url = process.env.NODE_ENV === 'development'
     ? 'http://localhost:5173?mode=mini'
@@ -240,7 +239,7 @@ function createAttachWindow(): BrowserWindow {
       event.preventDefault();
       return;
     }
-    beginUserResize();
+    beginUserResizeForWindow(win);
   });
 
   let saveMiniTimer: ReturnType<typeof setTimeout> | undefined;
@@ -252,7 +251,7 @@ function createAttachWindow(): BrowserWindow {
       lastSentMiniH = h;
       win.webContents.send('content-resized', 0, h);
     }
-    if (isMiniWidthResizeSuppressed()) return;
+    if (isMiniWidthResizeSuppressedForWindow(win)) return;
     clearTimeout(saveMiniTimer);
     saveMiniTimer = setTimeout(() => {
       if (win.isDestroyed()) return;
@@ -263,25 +262,23 @@ function createAttachWindow(): BrowserWindow {
   });
 
   win.on('resized', () => {
-    endUserResize();
+    endUserResizeForWindow(win);
   });
 
   win.on('closed', () => {
     clearTimeout(saveMiniTimer);
-    if (attachWindow === win) attachWindow = null;
-    if (isWindowAttached()) {
-      detachWindow();
-    }
+    attachWindows.delete(win);
+    detachOneByWindow(win);
   });
 
   return win;
 }
 
-function destroyAttachWindow(): void {
-  if (attachWindow && !attachWindow.isDestroyed()) {
-    attachWindow.destroy();
+function destroyAttachWindow(win: BrowserWindow): void {
+  if (!win.isDestroyed()) {
+    win.destroy();
   }
-  attachWindow = null;
+  attachWindows.delete(win);
 }
 
 function createWindow(): void {
@@ -510,8 +507,11 @@ function setupIPC(): void {
       senderWin.setOpacity(Math.max(0, Math.min(1, opacity)));
     }
   });
-  ipcMain.on('set-mini-width', (_event, width: number) => {
-    setMiniWidth(width);
+  ipcMain.on('set-mini-width', (event, width: number) => {
+    const senderWin = BrowserWindow.fromWebContents(event.sender);
+    if (senderWin) {
+      setMiniWidthForWindow(senderWin, width);
+    }
   });
   ipcMain.on('save-window-bounds', () => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
@@ -618,7 +618,6 @@ app.whenReady().then(() => {
     onStateChanged: () => rebuildTrayMenu(),
     createAttachWindow,
     destroyAttachWindow,
-    getAttachWindow: () => attachWindow,
     saveMiniSize: saveMiniSizeToSettings,
   });
   const savedSettings = loadSettings() as any;
@@ -634,7 +633,7 @@ app.whenReady().then(() => {
     log('startup: calling startAutoAttach with miniHeight=', wa.miniHeight, 'miniWidth=', wa.miniWidth);
     startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight, wa.miniWidth);
   }
-  createTray(mainWindow!, () => attachWindow);
+  createTray(mainWindow!, () => attachWindows);
   startScheduler(broadcastToAll);
 });
 
@@ -644,9 +643,14 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
-  if (attachWindow && !attachWindow.isDestroyed() && isWindowAttached()) {
-    const cs = attachWindow.getContentSize();
-    saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
+  if (isWindowAttached()) {
+    for (const win of attachWindows) {
+      if (!win.isDestroyed()) {
+        const cs = win.getContentSize();
+        saveMiniSizeToSettings(cs[0] ?? 0, cs[1] ?? 0);
+        break;
+      }
+    }
   }
   cleanupWindowAttach();
   stopScheduler();

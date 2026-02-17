@@ -4,7 +4,7 @@ import { getAttachState, detach as detachWindow } from './window-attach';
 
 let tray: Tray | null = null;
 let mainWindowRef: BrowserWindow | null = null;
-let getAttachWindowRef: (() => BrowserWindow | null) | null = null;
+let getAttachWindowsRef: (() => Set<BrowserWindow>) | null = null;
 
 function getIconPath(filename: string): string {
   if (app.isPackaged) {
@@ -46,9 +46,13 @@ function buildContextMenu(): Menu {
         if (isWindowAlive(mainWindow)) {
           mainWindow.webContents.send('trigger-refresh');
         }
-        const attachWin = getAttachWindowRef?.();
-        if (attachWin && isWindowAlive(attachWin)) {
-          attachWin.webContents.send('trigger-refresh');
+        const attachWins = getAttachWindowsRef?.();
+        if (attachWins) {
+          for (const win of attachWins) {
+            if (isWindowAlive(win)) {
+              win.webContents.send('trigger-refresh');
+            }
+          }
         }
       },
     },
@@ -67,8 +71,11 @@ function buildContextMenu(): Menu {
     (() => {
       const state = getAttachState();
       if (state.attached) {
+        const label = state.attachedCount > 1
+          ? `Detach from ${state.attachedCount} windows`
+          : `Detach from ${state.target?.title ?? 'window'}`;
         return {
-          label: `Detach from ${state.target?.title ?? 'window'}`,
+          label,
           click: () => detachWindow(),
         };
       }
@@ -93,9 +100,9 @@ function buildContextMenu(): Menu {
   ]);
 }
 
-export function createTray(mainWindow: BrowserWindow, getAttachWindow?: () => BrowserWindow | null): void {
+export function createTray(mainWindow: BrowserWindow, getAttachWindows?: () => Set<BrowserWindow>): void {
   mainWindowRef = mainWindow;
-  getAttachWindowRef = getAttachWindow ?? null;
+  getAttachWindowsRef = getAttachWindows ?? null;
   const iconPath = getIconPath('icon.ico');
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);
@@ -150,5 +157,5 @@ export function destroyTray(): void {
   tray?.destroy();
   tray = null;
   mainWindowRef = null;
-  getAttachWindowRef = null;
+  getAttachWindowsRef = null;
 }

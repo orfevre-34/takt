@@ -81,6 +81,7 @@ const HWND_TOP = 0;
 const WS_EX_TOPMOST = 0x00000008;
 
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+const EVENT_OBJECT_DESTROY = 0x8001;
 const EVENT_OBJECT_LOCATIONCHANGE = 0x800b;
 const EVENT_OBJECT_SHOW = 0x8002;
 const EVENT_OBJECT_HIDE = 0x8003;
@@ -206,20 +207,29 @@ export function watchWindowPosition(
   onMove: (bounds: WindowBounds) => void,
   onMinimize?: () => void,
   onRestore?: () => void,
+  onDestroy?: () => void,
 ): () => void {
   const pidOut = [0];
   GetWindowThreadProcessId_fn(targetHwnd, pidOut);
   const targetPid = pidOut[0]!;
   if (!targetPid) return () => {};
 
+  let cleaned = false;
+
   const callback = koffi.register(
     (
       _hook: number,
-      _event: number,
+      event: number,
       hwnd: number,
       idObject: number,
+      idChild: number,
     ) => {
-      if (hwnd !== targetHwnd || idObject !== OBJID_WINDOW) return;
+      if (hwnd !== targetHwnd || idObject !== OBJID_WINDOW || idChild !== 0) return;
+
+      if (event === EVENT_OBJECT_DESTROY) {
+        if (!cleaned) onDestroy?.();
+        return;
+      }
 
       if (IsIconic_fn(hwnd)) {
         onMinimize?.();
@@ -261,12 +271,23 @@ export function watchWindowPosition(
   );
   if (!hookShowHide) log('SetWinEventHook(SHOW/HIDE) failed for pid:', targetPid);
 
-  let cleaned = false;
+  const hookDestroy = SetWinEventHook(
+    EVENT_OBJECT_DESTROY,
+    EVENT_OBJECT_DESTROY,
+    0,
+    callback,
+    targetPid,
+    0,
+    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+  );
+  if (!hookDestroy) log('SetWinEventHook(DESTROY) failed for pid:', targetPid);
+
   return () => {
     if (cleaned) return;
     cleaned = true;
     if (hook) UnhookWinEvent(hook);
     if (hookShowHide) UnhookWinEvent(hookShowHide);
+    if (hookDestroy) UnhookWinEvent(hookDestroy);
     koffi.unregister(callback);
   };
 }

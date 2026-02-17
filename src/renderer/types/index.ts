@@ -20,6 +20,7 @@ export interface AttachState {
   target: AttachTarget | null;
   anchor: AnchorPosition;
   targetProcessName: string;
+  attachedCount: number;
 }
 
 // Usage Window Kind

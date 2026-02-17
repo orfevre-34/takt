@@ -463,7 +463,9 @@ function doAttach(hwnd: number, processId: number, title: string, path: string):
         }
       }
     } else {
-      clearTopmostBelow(attachNativeHwnd, fgHwnd);
+      if (isValidWindow(targetHwnd)) {
+        clearTopmostBelow(attachNativeHwnd, targetHwnd);
+      }
     }
   });
 

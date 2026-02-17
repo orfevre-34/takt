@@ -138,11 +138,11 @@ export function setTopmost(hwnd: number): void {
   if (!ok) log('SetWindowPos(TOPMOST) failed for hwnd:', hwnd);
 }
 
-export function clearTopmostBelow(hwnd: number, fgHwnd: number): void {
+export function clearTopmostBelow(hwnd: number, belowHwnd: number): void {
   const ok1 = SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
   if (!ok1) log('SetWindowPos(NOTOPMOST) failed for hwnd:', hwnd);
-  const ok2 = SetWindowPos_fn(hwnd, fgHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-  if (!ok2) log('SetWindowPos(below fg) failed for hwnd:', hwnd, 'fg:', fgHwnd);
+  const ok2 = SetWindowPos_fn(hwnd, belowHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok2) log('SetWindowPos(below) failed for hwnd:', hwnd, 'below:', belowHwnd);
 }
 
 export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => void): () => void {

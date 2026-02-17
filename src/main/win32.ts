@@ -63,11 +63,22 @@ const SetWindowPos_fn = user32.func(
   'bool __stdcall SetWindowPos(int64 hwnd, int64 hWndInsertAfter, int32 X, int32 Y, int32 cx, int32 cy, uint32 uFlags)',
 );
 
+const GetWindow_fn = user32.func(
+  'int64 __stdcall GetWindow(int64 hwnd, uint32 uCmd)',
+);
+
+const GetWindowLongPtrW_fn = user32.func(
+  'int64 __stdcall GetWindowLongPtrW(int64 hwnd, int32 nIndex)',
+);
+
+const GW_HWNDPREV = 3;
 const SWP_NOSIZE = 0x0001;
 const SWP_NOMOVE = 0x0002;
 const SWP_NOACTIVATE = 0x0010;
 const HWND_TOPMOST = -1;
 const HWND_NOTOPMOST = -2;
+const HWND_TOP = 0;
+const WS_EX_TOPMOST = 0x00000008;
 
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 const EVENT_OBJECT_LOCATIONCHANGE = 0x800b;
@@ -138,11 +149,24 @@ export function setTopmost(hwnd: number): void {
   if (!ok) log('SetWindowPos(TOPMOST) failed for hwnd:', hwnd);
 }
 
-export function clearTopmostBelow(hwnd: number, belowHwnd: number): void {
+export function placeAboveTarget(hwnd: number, targetHwnd: number): void {
   const ok1 = SetWindowPos_fn(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-  if (!ok1) log('SetWindowPos(NOTOPMOST) failed for hwnd:', hwnd);
-  const ok2 = SetWindowPos_fn(hwnd, belowHwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-  if (!ok2) log('SetWindowPos(below) failed for hwnd:', hwnd, 'below:', belowHwnd);
+  if (!ok1) {
+    log('SetWindowPos(NOTOPMOST) failed for hwnd:', hwnd);
+    return;
+  }
+
+  const prev = GetWindow_fn(targetHwnd, GW_HWNDPREV);
+  let insertAfter = HWND_TOP;
+  if (prev && prev !== hwnd) {
+    const exStyle = Number(GetWindowLongPtrW_fn(prev, GWL_EXSTYLE));
+    if (!(exStyle & WS_EX_TOPMOST)) {
+      insertAfter = prev;
+    }
+  }
+
+  const ok2 = SetWindowPos_fn(hwnd, insertAfter, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  if (!ok2) log('SetWindowPos(aboveTarget) failed for hwnd:', hwnd, 'insertAfter:', insertAfter);
 }
 
 export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => void): () => void {

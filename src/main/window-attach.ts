@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { log } from './logger';
-import { getAccurateWindowBounds, isValidWindow, isAppWindow, isMinimized, watchWindowPosition, getForegroundWindow, getWindowProcessId, setTopmost, clearTopmostBelow, watchForegroundChanges, type WindowBounds } from './win32';
+import { getAccurateWindowBounds, isValidWindow, isAppWindow, isMinimized, watchWindowPosition, getForegroundWindow, getWindowProcessId, setTopmost, placeAboveTarget, watchForegroundChanges, type WindowBounds } from './win32';
 
 const { windowManager } = require('node-window-manager');
 
@@ -464,7 +464,7 @@ function doAttach(hwnd: number, processId: number, title: string, path: string):
       }
     } else {
       if (isValidWindow(targetHwnd)) {
-        clearTopmostBelow(attachNativeHwnd, targetHwnd);
+        placeAboveTarget(attachNativeHwnd, targetHwnd);
       }
     }
   });

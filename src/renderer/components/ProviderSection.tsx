@@ -67,7 +67,7 @@ export function ProviderSection({
 }: ProviderSectionProps) {
   const windows: Array<{ window: UsageWindow | null; kind: 'primary' | 'secondary' }> = [
     { window: primaryWindow, kind: 'primary' },
-    { window: secondaryWindow, kind: 'secondary' },
+    ...(secondaryWindow !== null ? [{ window: secondaryWindow, kind: 'secondary' as const }] : []),
   ];
   const hasUsageData = primaryWindow !== null || secondaryWindow !== null;
   const hasTokenData = showToken && !!tokenUsage;
@@ -127,7 +127,7 @@ export function ProviderSection({
             hasHeatmap || showTokenPlaceholder ? 'justify-between' : 'justify-around'
           } items-center gap-4`}
         >
-          {/* ドーナツ群: 常に2つ表示 */}
+          {/* ドーナツ群 */}
           <div className="flex gap-3 flex-1 justify-center">
             {windows.map(({ window: w, kind }) => (
               <div key={kind} className="flex flex-col items-center">

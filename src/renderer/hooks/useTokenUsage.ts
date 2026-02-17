@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useAppStore } from '../store';
 import type { UsageProvider, TokenUsageSnapshot, CCUsageRawOutput } from '../types';
-import { getTodayISO, getStartOfWeek } from '../utils/format';
+import { getTodayISO, getStartOfWeekISO, normalizeDateToISO } from '../utils/format';
 
 export function useTokenUsage() {
   const {
@@ -21,14 +21,15 @@ export function useTokenUsage() {
         const raw: CCUsageRawOutput | null | undefined = await window.electronAPI?.runCcusage(provider);
         if (!raw) return;
 
-        const dailyEntries = raw.daily ?? [];
+        const rawEntries = raw.daily ?? [];
+        const dailyEntries = rawEntries.map((d) => ({ ...d, date: normalizeDateToISO(d.date) }));
         const cost = (e: { totalCost?: number; costUSD?: number }) => e.totalCost ?? e.costUSD ?? 0;
 
         const todayStr = getTodayISO();
-        const startOfWeek = getStartOfWeek();
+        const startOfWeekStr = getStartOfWeekISO();
 
         const todayEntry = dailyEntries.find((d) => d.date === todayStr);
-        const weekEntries = dailyEntries.filter((d) => new Date(d.date) >= startOfWeek);
+        const weekEntries = dailyEntries.filter((d) => d.date >= startOfWeekStr);
         const totals = raw.totals ?? { totalTokens: 0 };
 
         const snapshot: TokenUsageSnapshot = {
@@ -76,8 +77,15 @@ export function useTokenUsage() {
 
   useEffect(() => {
     const cleanup = window.electronAPI?.onTokenUsageUpdated((snapshot) => {
-      if (snapshot.provider === 'claude') setClaudeTokenUsage(snapshot);
-      else setCodexTokenUsage(snapshot);
+      const normalized = {
+        ...snapshot,
+        dailyUsage: snapshot.dailyUsage.map((d) => ({
+          ...d,
+          date: normalizeDateToISO(d.date),
+        })),
+      };
+      if (normalized.provider === 'claude') setClaudeTokenUsage(normalized);
+      else setCodexTokenUsage(normalized);
     });
     return cleanup;
   }, [setClaudeTokenUsage, setCodexTokenUsage]);

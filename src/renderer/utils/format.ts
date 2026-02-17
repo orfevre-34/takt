@@ -37,12 +37,23 @@ export function getTodayISO(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getStartOfWeek(): Date {
+export function normalizeDateToISO(dateStr: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const parsed = new Date(dateStr);
+  if (isNaN(parsed.getTime())) return dateStr;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function getStartOfWeekISO(): string {
   const now = new Date();
-  const day = now.getDay(); // 0 = Sunday
-  const diff = now.getDate() - day;
+  const diff = now.getDate() - now.getDay();
   const start = new Date(now);
   start.setDate(diff);
-  start.setHours(0, 0, 0, 0);
-  return start;
+  const y = start.getFullYear();
+  const m = String(start.getMonth() + 1).padStart(2, '0');
+  const d = String(start.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

@@ -69,6 +69,12 @@ export function useTokenUsage() {
   }, [refresh]);
 
   useEffect(() => {
+    const handler = () => { refresh(); };
+    const cleanup = window.electronAPI?.onTriggerRefresh(handler);
+    return cleanup;
+  }, [refresh]);
+
+  useEffect(() => {
     const cleanup = window.electronAPI?.onTokenUsageUpdated((snapshot) => {
       if (snapshot.provider === 'claude') setClaudeTokenUsage(snapshot);
       else setCodexTokenUsage(snapshot);

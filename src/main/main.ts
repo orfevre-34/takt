@@ -467,17 +467,25 @@ function setupIPC(): void {
     }
   });
   let lastContentW = 0;
+  const SNAP_THRESHOLD = 10;
   ipcMain.on('resize-to-content', (event, width: unknown, height: unknown) => {
     if (!mainWindow || typeof height !== 'number') return;
     const senderWin = BrowserWindow.fromWebContents(event.sender);
     if (senderWin !== mainWindow) return;
+
+    const oldBounds = mainWindow.getBounds();
+    const display = screen.getDisplayMatching(oldBounds);
+    const wa = display.workArea;
+
+    const wasNearRight = (oldBounds.x + oldBounds.width) >= (wa.x + wa.width - SNAP_THRESHOLD);
+    const wasNearBottom = (oldBounds.y + oldBounds.height) >= (wa.y + wa.height - SNAP_THRESHOLD);
+
     const newHeight = Math.max(150, Math.min(Math.ceil(height), 900));
     const curW = mainWindow.getContentSize()[0] ?? 480;
     if (typeof width === 'number') {
       const contentW = Math.max(380, Math.ceil(width));
       mainWindow.setMinimumSize(contentW, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
-      // Shrink when content itself shrinks, but allow user expansion
       const targetW = contentW < lastContentW ? contentW : Math.max(contentW, curW);
       lastContentW = contentW;
       mainWindow.setContentSize(targetW, newHeight);
@@ -486,6 +494,21 @@ function setupIPC(): void {
       mainWindow.setMinimumSize(380, newHeight);
       mainWindow.setMaximumSize(10000, newHeight);
       mainWindow.setContentSize(Math.max(380, curW), newHeight);
+    }
+
+    const newBounds = mainWindow.getBounds();
+    let { x, y } = newBounds;
+    const { width: nw, height: nh } = newBounds;
+
+    if (wasNearRight) {
+      x = Math.max(wa.x, wa.x + wa.width - nw);
+    }
+    if (wasNearBottom) {
+      y = Math.max(wa.y, wa.y + wa.height - nh);
+    }
+
+    if (x !== newBounds.x || y !== newBounds.y) {
+      mainWindow.setBounds({ x, y, width: nw, height: nh });
     }
   });
   ipcMain.on('app-quit', () => app.quit());

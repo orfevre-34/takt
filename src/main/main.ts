@@ -30,7 +30,7 @@ import {
   type AnchorPosition,
   type AttachResponsiveness,
 } from './window-attach';
-import { getForegroundWindow, getWindowProcessId } from './win32';
+import { getForegroundWindow, getWindowProcessId, getTaskbarBounds, setTopmost, watchForegroundChanges } from './win32';
 
 function parseCliArgs(str: string): string[] {
   const args: string[] = [];
@@ -51,6 +51,10 @@ function parseCliArgs(str: string): string[] {
 
 let mainWindow: BrowserWindow | null = null;
 const attachWindows = new Set<BrowserWindow>();
+let taskbarWidgetWindow: BrowserWindow | null = null;
+let taskbarPositionTimer: ReturnType<typeof setInterval> | null = null;
+let taskbarSaveOffsetTimer: ReturnType<typeof setTimeout> | undefined;
+let taskbarForegroundCleanup: (() => void) | null = null;
 let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 
@@ -153,6 +157,13 @@ function mergeSettings(current: Record<string, unknown>, incoming: Record<string
     ? incoming.windowAttach as Record<string, unknown>
     : {};
 
+  const currentTaskbar = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+    ? current.taskbarWidget as Record<string, unknown>
+    : {};
+  const incomingTaskbar = (incoming.taskbarWidget && typeof incoming.taskbarWidget === 'object')
+    ? incoming.taskbarWidget as Record<string, unknown>
+    : {};
+
   return {
     ...current,
     ...incoming,
@@ -161,6 +172,11 @@ function mergeSettings(current: Record<string, unknown>, incoming: Record<string
       ...incomingWindowAttach,
       miniHeight: currentWindowAttach.miniHeight ?? incomingWindowAttach.miniHeight,
       miniWidth: currentWindowAttach.miniWidth ?? incomingWindowAttach.miniWidth,
+    },
+    taskbarWidget: {
+      ...currentTaskbar,
+      ...incomingTaskbar,
+      offsetX: currentTaskbar.offsetX ?? incomingTaskbar.offsetX,
     },
   };
 }
@@ -187,6 +203,187 @@ function broadcastToAll(channel: string, ...args: unknown[]): void {
       win.webContents.send(channel, ...args);
     }
   }
+  if (taskbarWidgetWindow && !taskbarWidgetWindow.isDestroyed()) {
+    taskbarWidgetWindow.webContents.send(channel, ...args);
+  }
+}
+
+const TASKBAR_WIDGET_DEFAULT_WIDTH = 200;
+const TASKBAR_WIDGET_MARGIN = 120;
+let taskbarWidgetContentWidth = TASKBAR_WIDGET_DEFAULT_WIDTH;
+
+function positionTaskbarWidget(): void {
+  if (!taskbarWidgetWindow || taskbarWidgetWindow.isDestroyed()) return;
+  const tb = getTaskbarBounds();
+  if (!tb) return;
+
+  const settings = loadSettings() as any;
+  const offset = settings?.taskbarWidget?.offsetX ?? 0;
+
+  let x: number;
+  let y: number;
+  let w: number;
+  let h: number;
+
+  if (tb.position === 'bottom' || tb.position === 'top') {
+    w = Math.min(taskbarWidgetContentWidth, tb.width);
+    h = tb.height;
+    x = Math.max(tb.x, tb.x + tb.width - w - TASKBAR_WIDGET_MARGIN - offset);
+    y = tb.y;
+  } else {
+    w = tb.width;
+    h = Math.min(taskbarWidgetContentWidth, tb.height);
+    x = tb.x;
+    y = Math.max(tb.y, tb.y + tb.height - h - TASKBAR_WIDGET_MARGIN - offset);
+  }
+
+  taskbarWidgetWindow.setBounds({ x, y, width: w, height: h });
+}
+
+function resizeTaskbarWidgetWidth(contentWidth: number): void {
+  if (!taskbarWidgetWindow || taskbarWidgetWindow.isDestroyed()) return;
+  if (!Number.isFinite(contentWidth) || contentWidth <= 0) return;
+
+  const newW = Math.max(100, Math.ceil(contentWidth));
+  if (newW === taskbarWidgetContentWidth) return;
+  taskbarWidgetContentWidth = newW;
+  positionTaskbarWidget();
+}
+
+function createTaskbarWidgetWindow(): void {
+  if (taskbarWidgetWindow && !taskbarWidgetWindow.isDestroyed()) return;
+
+  const tb = getTaskbarBounds();
+  if (!tb) {
+    log('createTaskbarWidgetWindow: taskbar not found, rolling back enabled state');
+    const current = loadSettings() as any;
+    const tw = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+      ? current.taskbarWidget as Record<string, unknown> : {};
+    saveSettings({ ...current, taskbarWidget: { ...tw, enabled: false } });
+    rebuildTrayMenu();
+    return;
+  }
+
+  taskbarWidgetContentWidth = TASKBAR_WIDGET_DEFAULT_WIDTH;
+
+  taskbarWidgetWindow = new BrowserWindow({
+    width: taskbarWidgetContentWidth,
+    height: tb.height,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    skipTaskbar: true,
+    resizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  taskbarWidgetWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  const url = process.env.NODE_ENV === 'development'
+    ? 'http://localhost:5173?mode=taskbar'
+    : `file://${path.join(__dirname, '../renderer/index.html')}?mode=taskbar`;
+  taskbarWidgetWindow.loadURL(url);
+
+  taskbarWidgetWindow.webContents.once('did-finish-load', () => {
+    if (taskbarWidgetWindow?.isDestroyed()) return;
+    positionTaskbarWidget();
+    taskbarWidgetWindow!.show();
+
+    const hwndBuf = taskbarWidgetWindow!.getNativeWindowHandle();
+    const widgetHwnd = hwndBuf.length >= 8
+      ? Number(hwndBuf.readBigInt64LE(0))
+      : hwndBuf.readInt32LE(0);
+
+    setTopmost(widgetHwnd);
+    taskbarForegroundCleanup = watchForegroundChanges(() => {
+      if (!taskbarWidgetWindow || taskbarWidgetWindow.isDestroyed()) return;
+      setTopmost(widgetHwnd);
+    });
+  });
+
+  let pendingOffset: number | undefined;
+
+  taskbarWidgetWindow.on('will-move', (event, newBounds) => {
+    if (!taskbarWidgetWindow || taskbarWidgetWindow.isDestroyed()) return;
+    const tb = getTaskbarBounds();
+    if (!tb) return;
+
+    event.preventDefault();
+
+    if (tb.position === 'bottom' || tb.position === 'top') {
+      const w = Math.min(taskbarWidgetContentWidth, tb.width);
+      const clampedX = Math.max(tb.x, Math.min(newBounds.x, tb.x + tb.width - w));
+      taskbarWidgetWindow.setBounds({ x: clampedX, y: tb.y, width: w, height: tb.height });
+      pendingOffset = tb.x + tb.width - w - TASKBAR_WIDGET_MARGIN - clampedX;
+    } else {
+      const h = Math.min(taskbarWidgetContentWidth, tb.height);
+      const clampedY = Math.max(tb.y, Math.min(newBounds.y, tb.y + tb.height - h));
+      taskbarWidgetWindow.setBounds({ x: tb.x, y: clampedY, width: tb.width, height: h });
+      pendingOffset = tb.y + tb.height - h - TASKBAR_WIDGET_MARGIN - clampedY;
+    }
+
+    clearTimeout(taskbarSaveOffsetTimer);
+    taskbarSaveOffsetTimer = setTimeout(() => {
+      if (pendingOffset === undefined || !taskbarWidgetWindow || taskbarWidgetWindow.isDestroyed()) return;
+      const current = loadSettings() as any;
+      saveSettings({
+        ...current,
+        taskbarWidget: { ...(current.taskbarWidget || {}), enabled: true, offsetX: pendingOffset },
+      });
+      pendingOffset = undefined;
+    }, 300);
+  });
+
+  taskbarWidgetWindow.on('closed', () => {
+    clearTimeout(taskbarSaveOffsetTimer);
+    taskbarSaveOffsetTimer = undefined;
+    if (taskbarForegroundCleanup) {
+      taskbarForegroundCleanup();
+      taskbarForegroundCleanup = null;
+    }
+    const wasExpected = taskbarWidgetWindow === null;
+    taskbarWidgetWindow = null;
+    if (taskbarPositionTimer) {
+      clearInterval(taskbarPositionTimer);
+      taskbarPositionTimer = null;
+    }
+    if (!wasExpected && !isQuitting) {
+      const current = loadSettings() as any;
+      const tw = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+        ? current.taskbarWidget as Record<string, unknown> : {};
+      saveSettings({ ...current, taskbarWidget: { ...tw, enabled: false } });
+      rebuildTrayMenu();
+    }
+  });
+
+  taskbarPositionTimer = setInterval(() => positionTaskbarWidget(), 5000);
+  log('createTaskbarWidgetWindow: created');
+}
+
+function destroyTaskbarWidgetWindow(): void {
+  clearTimeout(taskbarSaveOffsetTimer);
+  taskbarSaveOffsetTimer = undefined;
+  if (taskbarForegroundCleanup) {
+    taskbarForegroundCleanup();
+    taskbarForegroundCleanup = null;
+  }
+  if (taskbarPositionTimer) {
+    clearInterval(taskbarPositionTimer);
+    taskbarPositionTimer = null;
+  }
+  const win = taskbarWidgetWindow;
+  taskbarWidgetWindow = null;
+  if (win && !win.isDestroyed()) {
+    win.destroy();
+  }
+  log('destroyTaskbarWidgetWindow: destroyed');
 }
 
 function createAttachWindow(): BrowserWindow {
@@ -532,7 +729,10 @@ function setupIPC(): void {
   });
   ipcMain.on('set-mini-width', (event, width: number) => {
     const senderWin = BrowserWindow.fromWebContents(event.sender);
-    if (senderWin) {
+    if (!senderWin) return;
+    if (senderWin === taskbarWidgetWindow) {
+      resizeTaskbarWidgetWidth(width);
+    } else {
       setMiniWidthForWindow(senderWin, width);
     }
   });
@@ -629,6 +829,32 @@ function setupIPC(): void {
       setResponsiveness(preset as AttachResponsiveness);
     }
   });
+  ipcMain.handle('toggle-taskbar-widget', (_event, enabled: boolean) => {
+    const current = loadSettings();
+    const tw = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+      ? current.taskbarWidget as Record<string, unknown> : {};
+    saveSettings({ ...current, taskbarWidget: { ...tw, enabled } });
+    if (enabled) {
+      createTaskbarWidgetWindow();
+    } else {
+      destroyTaskbarWidgetWindow();
+    }
+    rebuildTrayMenu();
+  });
+  ipcMain.handle('set-taskbar-widget-offset', (_event, offsetX: number) => {
+    const current = loadSettings();
+    const tw = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+      ? current.taskbarWidget as Record<string, unknown> : {};
+    saveSettings({ ...current, taskbarWidget: { ...tw, offsetX } });
+    positionTaskbarWidget();
+  });
+  ipcMain.handle('get-taskbar-widget-state', () => {
+    const settings = loadSettings() as any;
+    return {
+      enabled: !!settings?.taskbarWidget?.enabled,
+      offsetX: settings?.taskbarWidget?.offsetX ?? 0,
+    };
+  });
 }
 
 app.whenReady().then(() => {
@@ -656,7 +882,24 @@ app.whenReady().then(() => {
     log('startup: calling startAutoAttach with miniHeight=', wa.miniHeight, 'miniWidth=', wa.miniWidth);
     startAutoAttach(wa.targetProcessName, wa.anchor || 'top-right', wa.miniHeight, wa.miniWidth);
   }
-  createTray(mainWindow!, () => attachWindows);
+  const tw = savedSettings?.taskbarWidget;
+  if (tw?.enabled) {
+    createTaskbarWidgetWindow();
+  }
+  createTray(mainWindow!, () => attachWindows, {
+    isEnabled: () => !!(taskbarWidgetWindow && !taskbarWidgetWindow.isDestroyed()),
+    toggle: (enabled: boolean) => {
+      const current = loadSettings();
+      const twSettings = (current.taskbarWidget && typeof current.taskbarWidget === 'object')
+        ? current.taskbarWidget as Record<string, unknown> : {};
+      saveSettings({ ...current, taskbarWidget: { ...twSettings, enabled } });
+      if (enabled) {
+        createTaskbarWidgetWindow();
+      } else {
+        destroyTaskbarWidgetWindow();
+      }
+    },
+  });
   startScheduler(broadcastToAll);
 });
 
@@ -675,6 +918,7 @@ app.on('before-quit', () => {
       }
     }
   }
+  destroyTaskbarWidgetWindow();
   cleanupWindowAttach();
   stopScheduler();
 });

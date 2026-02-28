@@ -41,6 +41,10 @@ const DEFAULT_SETTINGS: Settings = {
     miniHeight: 48,
     responsiveness: 'normal',
   },
+  taskbarWidget: {
+    enabled: false,
+    offsetX: 0,
+  },
 };
 
 function deepMergeSettings(saved: Partial<Settings>): Settings {
@@ -68,6 +72,7 @@ function deepMergeSettings(saved: Partial<Settings>): Settings {
     },
     colors: { ...DEFAULT_SETTINGS.colors, ...saved.colors },
     windowAttach: { ...DEFAULT_SETTINGS.windowAttach, ...saved.windowAttach },
+    taskbarWidget: { ...DEFAULT_SETTINGS.taskbarWidget, ...saved.taskbarWidget },
   };
 }
 

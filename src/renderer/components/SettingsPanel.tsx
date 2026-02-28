@@ -255,6 +255,25 @@ export function SettingsPanel({ settings, attachState, onSave, onClose }: Settin
 
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
+            Taskbar Widget
+          </h3>
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={settings.taskbarWidget?.enabled ?? false}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                update('taskbarWidget', { ...(settings.taskbarWidget ?? { enabled: false, offsetX: 0 }), enabled });
+                window.electronAPI?.toggleTaskbarWidget?.(enabled);
+              }}
+              className="accent-green-500"
+            />
+            Show widget on taskbar
+          </label>
+        </section>
+
+        <section className="mb-4">
+          <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Window Attach
           </h3>
 

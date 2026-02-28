@@ -8,11 +8,12 @@ interface MiniViewProps {
   codexUsage: UsageSnapshot | null;
   settings: Settings;
   initialHeight?: number;
+  taskbarMode?: boolean;
   onDetach: () => void;
   onOffsetChange: (ox: number, oy: number) => void;
 }
 
-export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onDetach, onOffsetChange }: MiniViewProps) {
+export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, taskbarMode, onDetach, onOffsetChange }: MiniViewProps) {
   const showClaude = settings.providers.claude.enabled;
   const showCodex = settings.providers.codex.enabled;
 
@@ -30,6 +31,7 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
   const [dragStart, setDragStart] = useState({ screenX: 0, screenY: 0, baseOffsetX: 0, baseOffsetY: 0 });
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (taskbarMode) return;
     if (!e.ctrlKey) return;
     e.preventDefault();
     setDragging(true);
@@ -39,7 +41,7 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
       baseOffsetX: wa?.offsetX ?? 0,
       baseOffsetY: wa?.offsetY ?? 0,
     });
-  }, [wa?.offsetX, wa?.offsetY]);
+  }, [taskbarMode, wa?.offsetX, wa?.offsetY]);
 
   useEffect(() => {
     if (!dragging) return;
@@ -96,10 +98,13 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, onD
   return (
     <div
       className={`w-full h-full flex items-center justify-center rounded-lg select-none ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
-      style={{ background: 'rgba(24,24,27,0.88)' }}
+      style={{
+        background: 'rgba(24,24,27,0.88)',
+        ...(taskbarMode ? { WebkitAppRegion: 'drag' } as React.CSSProperties : {}),
+      }}
       onMouseDown={handleMouseDown}
       onDoubleClick={onDetach}
-      title="Double-click to detach / Ctrl+drag to adjust / Ctrl+resize"
+      title={taskbarMode ? "Double-click to close / Drag to move" : "Double-click to detach / Ctrl+drag to adjust / Ctrl+resize"}
     >
       <div ref={contentRef} className="flex items-center" style={{ gap: gapPx }}>
         {showClaude && (

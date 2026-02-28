@@ -10,7 +10,9 @@ import { getStatusColor } from './utils/colors';
 import { formatTimeRemaining } from './utils/format';
 import type { AttachState } from './types';
 
-const isMiniMode = new URLSearchParams(window.location.search).get('mode') === 'mini';
+const urlMode = new URLSearchParams(window.location.search).get('mode');
+const isMiniMode = urlMode === 'mini';
+const isTaskbarMode = urlMode === 'taskbar';
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,7 +23,7 @@ export function App() {
   const { settingsOpen, setSettingsOpen, loading, error } = useAppStore();
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ screenX: 0, screenY: 0, winX: 0, winY: 0 });
-  const [attachState, setAttachState] = useState<AttachState>({ attached: false, target: null, anchor: 'top-right', targetProcessName: '' });
+  const [attachState, setAttachState] = useState<AttachState>({ attached: false, target: null, anchor: 'top-right', targetProcessName: '', attachedCount: 0 });
 
   // アタッチ状態の初期取得 + 購読
   useEffect(() => {
@@ -115,6 +117,19 @@ export function App() {
     resizeToFit();
     return () => observer.disconnect();
   }, [resizeToFit]);
+
+  if (isTaskbarMode) {
+    return (
+      <MiniView
+        claudeUsage={claudeUsage}
+        codexUsage={codexUsage}
+        settings={settings}
+        taskbarMode
+        onDetach={() => window.electronAPI?.toggleTaskbarWidget?.(false)}
+        onOffsetChange={() => {}}
+      />
+    );
+  }
 
   if (isMiniMode) {
     return (

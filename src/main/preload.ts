@@ -65,6 +65,9 @@ const api: ElectronAPI = {
     ipcRenderer.on('content-resized', handler);
     return () => ipcRenderer.removeListener('content-resized', handler);
   },
+  toggleTaskbarWidget: (enabled) => ipcRenderer.invoke('toggle-taskbar-widget', enabled),
+  setTaskbarWidgetOffset: (offsetX) => ipcRenderer.invoke('set-taskbar-widget-offset', offsetX),
+  getTaskbarWidgetState: () => ipcRenderer.invoke('get-taskbar-widget-state'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

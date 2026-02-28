@@ -67,6 +67,10 @@ const GetWindow_fn = user32.func(
   'int64 __stdcall GetWindow(int64 hwnd, uint32 uCmd)',
 );
 
+const FindWindowW_fn = user32.func(
+  'int64 __stdcall FindWindowW(uint16 *lpClassName, uint16 *lpWindowName)',
+);
+
 const GetWindowLongPtrW_fn = user32.func(
   'int64 __stdcall GetWindowLongPtrW(int64 hwnd, int32 nIndex)',
 );
@@ -200,6 +204,38 @@ export function watchForegroundChanges(onForegroundChanged: (fgHwnd: number) => 
     if (hook) UnhookWinEvent(hook);
     koffi.unregister(callback);
   };
+}
+
+export type TaskbarPosition = 'bottom' | 'top' | 'left' | 'right';
+
+export interface TaskbarBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  position: TaskbarPosition;
+}
+
+export function getTaskbarBounds(): TaskbarBounds | null {
+  const className = Buffer.from('Shell_TrayWnd\0', 'utf16le');
+  const hwnd = FindWindowW_fn(className, null);
+  if (!hwnd) return null;
+
+  const rect = { left: 0, top: 0, right: 0, bottom: 0 };
+  const ok = GetWindowRect_fn(hwnd, rect);
+  if (!ok) return null;
+
+  const w = rect.right - rect.left;
+  const h = rect.bottom - rect.top;
+
+  let position: TaskbarPosition = 'bottom';
+  if (h > w) {
+    position = rect.left <= 0 ? 'left' : 'right';
+  } else {
+    position = rect.top <= 0 ? 'top' : 'bottom';
+  }
+
+  return { x: rect.left, y: rect.top, width: w, height: h, position };
 }
 
 export function watchWindowPosition(

@@ -115,6 +115,10 @@ export interface Settings {
     miniHeight?: number;
     responsiveness?: AttachResponsiveness;
   };
+  taskbarWidget: {
+    enabled: boolean;
+    offsetX: number;
+  };
 }
 
 export interface StatusThresholds {
@@ -158,7 +162,10 @@ export type IpcChannel =
   | 'trigger-refresh'
   | 'attach-state-changed'
   | 'set-attach-responsiveness'
-  | 'open-settings';
+  | 'open-settings'
+  | 'toggle-taskbar-widget'
+  | 'set-taskbar-widget-offset'
+  | 'get-taskbar-widget-state';
 
 // Usage fetch result (success returns snapshot fields, failure returns ok+error)
 export type UsageFetchResult =
@@ -215,6 +222,9 @@ export interface ElectronAPI {
   setAttachResponsiveness: (preset: AttachResponsiveness) => Promise<void>;
   onOpenSettings: (callback: () => void) => () => void;
   onContentResized: (callback: (width: number, height: number) => void) => () => void;
+  toggleTaskbarWidget: (enabled: boolean) => Promise<void>;
+  setTaskbarWidgetOffset: (offsetX: number) => Promise<void>;
+  getTaskbarWidgetState: () => Promise<{ enabled: boolean; offsetX: number }>;
 }
 
 declare global {

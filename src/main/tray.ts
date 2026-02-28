@@ -5,6 +5,10 @@ import { getAttachState, detach as detachWindow } from './window-attach';
 let tray: Tray | null = null;
 let mainWindowRef: BrowserWindow | null = null;
 let getAttachWindowsRef: (() => Set<BrowserWindow>) | null = null;
+let taskbarWidgetCallbacks: {
+  isEnabled: () => boolean;
+  toggle: (enabled: boolean) => void;
+} | null = null;
 
 function getIconPath(filename: string): string {
   if (app.isPackaged) {
@@ -84,7 +88,14 @@ function buildContextMenu(): Menu {
         click: () => showAndSend(mainWindow, 'open-settings'),
       };
     })(),
-    { type: 'separator' },
+    ...(taskbarWidgetCallbacks ? [{
+      label: 'Taskbar Widget',
+      type: 'checkbox' as const,
+      checked: taskbarWidgetCallbacks.isEnabled(),
+      click: (menuItem: Electron.MenuItem) => {
+        taskbarWidgetCallbacks?.toggle(menuItem.checked);
+      },
+    }, { type: 'separator' as const }] : []),
     {
       label: 'Settings',
       click: () => showAndSend(mainWindow, 'open-settings'),
@@ -100,9 +111,14 @@ function buildContextMenu(): Menu {
   ]);
 }
 
-export function createTray(mainWindow: BrowserWindow, getAttachWindows?: () => Set<BrowserWindow>): void {
+export function createTray(
+  mainWindow: BrowserWindow,
+  getAttachWindows?: () => Set<BrowserWindow>,
+  taskbarWidget?: { isEnabled: () => boolean; toggle: (enabled: boolean) => void },
+): void {
   mainWindowRef = mainWindow;
   getAttachWindowsRef = getAttachWindows ?? null;
+  taskbarWidgetCallbacks = taskbarWidget ?? null;
   const iconPath = getIconPath('icon.ico');
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.isEmpty() ? nativeImage.createFromBuffer(createDefaultIcon()) : icon);

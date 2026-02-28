@@ -857,8 +857,13 @@ function setupIPC(): void {
   });
 }
 
+const dataDir = getDataDir();
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+app.setPath('sessionData', dataDir);
+
 app.whenReady().then(() => {
-  ensureAppDataDir();
   clearLog();
   log('Takt started. Log file:', getLogPath());
   setupIPC();

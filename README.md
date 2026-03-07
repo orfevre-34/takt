@@ -127,6 +127,8 @@ Takt authenticates via persistent Electron sessions to fetch usage data directly
 
 Takt was heavily inspired by [**AgentLimits**](https://github.com/Nihondo/AgentLimits) by [@Nihondo](https://github.com/Nihondo) — a beautifully crafted macOS menu bar widget for monitoring Claude Code usage built with Swift and WidgetKit. Takt aims to bring a similar experience to Windows users using web technologies. Huge thanks to the AgentLimits project for the original idea and design inspiration.
 
+Thanks also to [**ccusage**](https://github.com/ryoppippi/ccusage) by [@ryoppippi](https://github.com/ryoppippi) for providing a simple and reliable CLI to retrieve token usage data from Claude Code and Codex sessions. Takt's token tracking and heatmap features are powered by ccusage.
+
 ## License
 
 [MIT](LICENSE)

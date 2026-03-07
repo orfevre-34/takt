@@ -1,7 +1,18 @@
-import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { UsageSnapshot, UsageWindow, Settings, DisplayMode } from '../types';
 import { getStatusColor } from '../utils/colors';
 import { calcProjectedPercent, getPaceBadgeClasses } from '../utils/pace';
+
+function useSystemDarkMode(): boolean {
+  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return dark;
+}
 
 interface MiniViewProps {
   claudeUsage: UsageSnapshot | null;
@@ -78,35 +89,96 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, tas
     };
   }, []);
 
-  // 高さからすべてのサイズを算出（クランプなし — ウィンドウ制約でバウンド）
+  // レンダリング後にコンテンツ幅を測定してmainに報告
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    let lastW = 0;
+    const report = () => {
+      const w = Math.ceil(el.getBoundingClientRect().width) + 12;
+      if (w !== lastW) {
+        lastW = w;
+        window.electronAPI?.setMiniWidth?.(w);
+      }
+    };
+    const observer = new ResizeObserver(() => report());
+    observer.observe(el);
+    report();
+    return () => observer.disconnect();
+  }, []);
+
+  // タスクバーモード: システムテーマ連動テキスト
+  const isDark = useSystemDarkMode();
+  if (taskbarMode) {
+    const fontSize = Math.max(9, Math.round(contentH * 0.28));
+    const gaugeWidth = Math.max(20, Math.round(contentH * 1.1));
+    const textColor = isDark ? '#d4d4d4' : '#404040';
+    const mutedColor = isDark ? '#a1a1aa' : '#71717a';
+    const trackColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
+    const separatorColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+
+    return (
+      <div
+        className="w-full h-full flex items-center justify-center select-none"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        onDoubleClick={onDetach}
+        title="Double-click to close / Drag to move"
+      >
+        <div ref={contentRef} className="flex items-center w-max" style={{ gap: Math.round(fontSize * 0.6) }}>
+          {showClaude && (
+            <TaskbarLabel
+              label="C"
+              pw={claudeUsage?.primaryWindow ?? null}
+              color={textColor}
+              mutedColor={mutedColor}
+              trackColor={trackColor}
+              displayMode={settings.displayMode}
+              fontSize={fontSize}
+              gaugeWidth={gaugeWidth}
+              warningThreshold={settings.thresholds.claude.primary.warningPercent}
+              dangerThreshold={settings.thresholds.claude.primary.dangerPercent}
+            />
+          )}
+          {showClaude && showCodex && (
+            <span className="font-bold" style={{ fontSize, color: separatorColor }}>|</span>
+          )}
+          {showCodex && (
+            <TaskbarLabel
+              label="X"
+              pw={codexUsage?.primaryWindow ?? null}
+              color={textColor}
+              mutedColor={mutedColor}
+              trackColor={trackColor}
+              displayMode={settings.displayMode}
+              fontSize={fontSize}
+              gaugeWidth={gaugeWidth}
+              warningThreshold={settings.thresholds.codex.primary.warningPercent}
+              dangerThreshold={settings.thresholds.codex.primary.dangerPercent}
+            />
+          )}
+          {!showClaude && !showCodex && (
+            <span style={{ fontSize, color: mutedColor }}>--</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // アタッチモード: ドーナツデザイン
   const donutSize = Math.round(contentH * 0.7);
   const labelSize = Math.max(5, Math.round(contentH * 0.14));
   const gapPx = Math.max(2, Math.round(contentH * 0.04));
 
-  // レンダリング後にコンテンツ幅を測定してmainに報告（幅のみ→フィードバックループなし）
-  const contentRef = useRef<HTMLDivElement>(null);
-  const lastReportedWidth = useRef(0);
-  useLayoutEffect(() => {
-    if (!contentRef.current) return;
-    const w = Math.ceil(contentRef.current.scrollWidth) + 8;
-    if (w !== lastReportedWidth.current) {
-      lastReportedWidth.current = w;
-      window.electronAPI?.setMiniWidth?.(w);
-    }
-  });
-
   return (
     <div
       className={`w-full h-full flex items-center justify-center rounded-lg select-none ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
-      style={{
-        background: 'rgba(24,24,27,0.88)',
-        ...(taskbarMode ? { WebkitAppRegion: 'drag' } as React.CSSProperties : {}),
-      }}
+      style={{ background: 'rgba(24,24,27,0.88)' }}
       onMouseDown={handleMouseDown}
       onDoubleClick={onDetach}
-      title={taskbarMode ? "Double-click to close / Drag to move" : "Double-click to detach / Ctrl+drag to adjust / Ctrl+resize"}
+      title="Double-click to detach / Ctrl+drag to adjust / Ctrl+resize"
     >
-      <div ref={contentRef} className="flex items-center" style={{ gap: gapPx }}>
+      <div ref={contentRef} className="flex items-center w-max" style={{ gap: gapPx }}>
         {showClaude && (
           <MiniProviderGroup
             label="Claude"
@@ -140,6 +212,108 @@ export function MiniView({ claudeUsage, codexUsage, settings, initialHeight, tas
           <span className="text-zinc-500 text-[10px]">--</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function SemiGauge({ width, value, color, trackColor, text, textColor }: {
+  width: number;
+  value: number;
+  color: string;
+  trackColor: string;
+  text: string;
+  textColor: string;
+}) {
+  const stroke = Math.max(2.5, width * 0.12);
+  const r = (width - stroke) / 2;
+  const height = r + stroke / 2 + 1;
+  const cx = width / 2;
+  const cy = r + stroke / 2;
+  const arcLen = Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, value));
+  const offset = arcLen - (clamped / 100) * arcLen;
+  const labelFontSize = Math.max(6, Math.round(width * 0.28));
+
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      {/* トラック（半円） */}
+      <path
+        d={`M ${stroke / 2} ${cy} A ${r} ${r} 0 0 1 ${width - stroke / 2} ${cy}`}
+        fill="none" stroke={trackColor} strokeWidth={stroke} strokeLinecap="butt"
+      />
+      {/* 値（半円） */}
+      <path
+        d={`M ${stroke / 2} ${cy} A ${r} ${r} 0 0 1 ${width - stroke / 2} ${cy}`}
+        fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="butt"
+        strokeDasharray={arcLen} strokeDashoffset={offset}
+      />
+      {/* テキスト */}
+      <text
+        x={cx} y={cy}
+        textAnchor="middle" dominantBaseline="auto"
+        fill={textColor} fontSize={labelFontSize} fontWeight="bold"
+      >
+        {text}
+      </text>
+    </svg>
+  );
+}
+
+function TaskbarLabel({
+  label,
+  pw,
+  color,
+  mutedColor,
+  trackColor,
+  displayMode,
+  fontSize,
+  gaugeWidth,
+  warningThreshold = 70,
+  dangerThreshold = 90,
+}: {
+  label: string;
+  pw: UsageWindow | null;
+  color: string;
+  mutedColor: string;
+  trackColor: string;
+  displayMode: DisplayMode;
+  fontSize: number;
+  gaugeWidth: number;
+  warningThreshold?: number;
+  dangerThreshold?: number;
+}) {
+  const usedPct = pw ? (displayMode === 'remaining' ? 100 - pw.usedPercent : pw.usedPercent) : 0;
+  const timeInfo = useTimeInfo(pw?.resetAt ?? null, pw?.limitWindowSeconds ?? 0, displayMode);
+
+  const rawProjected = pw && timeInfo.rawTimePercent !== null
+    ? calcProjectedPercent(pw.usedPercent, timeInfo.rawTimePercent)
+    : null;
+  const projectedDisplay = rawProjected !== null
+    ? displayMode === 'remaining' ? Math.max(0, 100 - rawProjected) : rawProjected
+    : null;
+
+  const smallFont = Math.max(7, Math.round(fontSize * 0.8));
+  const gap = Math.round(fontSize * 0.3);
+
+  return (
+    <div className="flex items-center whitespace-nowrap" style={{ gap }}>
+      <span className="font-bold" style={{ fontSize: smallFont, color: mutedColor }}>{label}</span>
+      <SemiGauge
+        width={gaugeWidth}
+        value={Math.round(Math.max(0, Math.min(100, usedPct)))}
+        color={color}
+        trackColor={trackColor}
+        text={`${Math.round(usedPct)}%`}
+        textColor={color}
+      />
+      {pw && (
+        <span className="font-medium" style={{ fontSize: smallFont, color: mutedColor }}>{timeInfo.label}</span>
+      )}
+      {projectedDisplay !== null && (
+        <span className="font-semibold" style={{ fontSize: smallFont, color: mutedColor }}>
+          →{Math.round(projectedDisplay)}%
+        </span>
+      )}
     </div>
   );
 }

@@ -165,7 +165,8 @@ export type IpcChannel =
   | 'open-settings'
   | 'toggle-taskbar-widget'
   | 'set-taskbar-widget-offset'
-  | 'get-taskbar-widget-state';
+  | 'get-taskbar-widget-state'
+  | 'get-statusline-config';
 
 // Usage fetch result (success returns snapshot fields, failure returns ok+error)
 export type UsageFetchResult =
@@ -225,6 +226,7 @@ export interface ElectronAPI {
   toggleTaskbarWidget: (enabled: boolean) => Promise<void>;
   setTaskbarWidgetOffset: (offsetX: number) => Promise<void>;
   getTaskbarWidgetState: () => Promise<{ enabled: boolean; offsetX: number }>;
+  getStatuslineConfig: (style: 'powerline' | 'simple') => Promise<string>;
 }
 
 declare global {

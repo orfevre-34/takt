@@ -68,6 +68,7 @@ const api: ElectronAPI = {
   toggleTaskbarWidget: (enabled) => ipcRenderer.invoke('toggle-taskbar-widget', enabled),
   setTaskbarWidgetOffset: (offsetX) => ipcRenderer.invoke('set-taskbar-widget-offset', offsetX),
   getTaskbarWidgetState: () => ipcRenderer.invoke('get-taskbar-widget-state'),
+  getStatuslineConfig: (style) => ipcRenderer.invoke('get-statusline-config', style),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

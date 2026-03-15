@@ -855,6 +855,15 @@ function setupIPC(): void {
       offsetX: settings?.taskbarWidget?.offsetX ?? 0,
     };
   });
+  ipcMain.handle('get-statusline-config', (_event, style: string) => {
+    const scriptPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'takt-statusline.mjs')
+      : path.join(app.getAppPath(), 'scripts', 'takt-statusline.mjs');
+    const command = style === 'simple'
+      ? `TAKT_STYLE=simple node "${scriptPath.replace(/\\/g, '/')}"`
+      : `node "${scriptPath.replace(/\\/g, '/')}"`;
+    return JSON.stringify({ statusLine: { type: 'command', command, padding: 0 } }, null, 2);
+  });
 }
 
 const dataDir = getDataDir();

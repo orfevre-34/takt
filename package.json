@@ -1,6 +1,6 @@
 {
   "name": "takt",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "description": "Desktop widget for Claude Code / Codex usage monitoring",
   "author": "tikeg",
@@ -32,6 +32,10 @@
       {
         "from": "build/tray-icon.png",
         "to": "tray-icon.png"
+      },
+      {
+        "from": "scripts/takt-statusline.mjs",
+        "to": "takt-statusline.mjs"
       }
     ],
     "win": {

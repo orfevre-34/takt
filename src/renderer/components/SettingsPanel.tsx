@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import type { Settings, DisplayMode, LayoutOrientation, AttachState, AnchorPosition, AttachResponsiveness } from '../types';
+
+type StatuslineStyle = 'powerline' | 'simple';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -272,6 +275,8 @@ export function SettingsPanel({ settings, attachState, onSave, onClose }: Settin
           </label>
         </section>
 
+        <StatusLineSection />
+
         <section className="mb-4">
           <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
             Window Attach
@@ -404,5 +409,57 @@ export function SettingsPanel({ settings, attachState, onSave, onClose }: Settin
 
       </div>
     </div>
+  );
+}
+
+function StatusLineSection() {
+  const [style, setStyle] = useState<StatuslineStyle>('powerline');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const config = await window.electronAPI?.getStatuslineConfig?.(style);
+    if (config) {
+      await navigator.clipboard.writeText(config);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <section className="mb-4">
+      <h3 className="text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wider">
+        Claude Code Status Line
+      </h3>
+      <div className="flex gap-2 mb-2">
+        {(['powerline', 'simple'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStyle(s)}
+            className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              style === s
+                ? 'bg-zinc-700 text-zinc-100'
+                : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {s === 'powerline' ? 'Powerline' : 'Simple'}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-zinc-500 mb-2">
+        {style === 'powerline'
+          ? 'Nerd Font required'
+          : 'No special font needed'}
+      </p>
+      <button
+        onClick={handleCopy}
+        className={`w-full text-xs font-medium py-1.5 rounded border transition-colors ${
+          copied
+            ? 'bg-green-700/30 text-green-300 border-green-700/40'
+            : 'bg-blue-700/30 hover:bg-blue-700/50 text-blue-300 border-blue-700/40'
+        }`}
+      >
+        {copied ? 'Copied!' : 'Copy settings.json config'}
+      </button>
+    </section>
   );
 }
